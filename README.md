@@ -99,7 +99,7 @@ src/
 
 ---
 
-## 💡 Pro Tips
+## Tips
 
 Run modules properly:
 
