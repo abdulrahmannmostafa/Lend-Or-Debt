@@ -1,0 +1,790 @@
+{
+  "results": {
+    "1_Accuracy": [
+      {
+        "check": "AGE in [18, 100] (business rule: credit card eligibility floor)",
+        "success": true,
+        "observed": "0 out-of-range",
+        "expected": "0"
+      },
+      {
+        "check": "LIMIT_BAL in (0, 1B NTD] (business rule: positive credit limit)",
+        "success": true,
+        "observed": "0 out-of-range",
+        "expected": "0"
+      },
+      {
+        "check": "CPI in 2005 Taiwan published range [100, 200] (DGBAS data)",
+        "success": true,
+        "observed": "mean=195.1333, 0 out-of-range rows",
+        "expected": "all values in [100, 200]"
+      },
+      {
+        "check": "GDP index in 2005 FRED range [10000, 15000]",
+        "success": true,
+        "observed": "mean=13032.649, 0 out-of-range rows",
+        "expected": "all values in [10000.0, 15000.0]"
+      },
+      {
+        "check": "TAIEX in 2005 TWSE range [5000, 7500]",
+        "success": true,
+        "observed": "mean=6071.1404, 0 out-of-range rows",
+        "expected": "all values in [5000.0, 7500.0]"
+      },
+      {
+        "check": "Discount Rate in 2005 CBC range [1.5, 2.5]",
+        "success": true,
+        "observed": "mean=2.0625, 0 out-of-range rows",
+        "expected": "all values in [1.5, 2.5]"
+      },
+      {
+        "check": "Unemployment in 2005 DGBAS range [3.0, 5.5]",
+        "success": true,
+        "observed": "mean=4.1, 0 out-of-range rows",
+        "expected": "all values in [3.0, 5.5]"
+      }
+    ],
+    "2_Consistency": [
+      {
+        "check": "Borrowers with total_delinquency=0 have no PAY_STATUS > 0 (logical cross-column)",
+        "success": true,
+        "observed": "0 inconsistent rows",
+        "expected": "0"
+      },
+      {
+        "check": "max_delinquency <= 8 (ceiling of PAY_STATUS scale)",
+        "success": true,
+        "observed": "0 values above 8",
+        "expected": "0"
+      },
+      {
+        "check": "avg_payment >= 0 (payments are non-negative cash flows)",
+        "success": true,
+        "observed": "0 negative values",
+        "expected": "0"
+      },
+      {
+        "check": "avg_bill > -1,000,000 NTD (credit note floor)",
+        "success": true,
+        "observed": "0 below floor",
+        "expected": "0"
+      },
+      {
+        "check": "PAY_AMT1 / BILL_AMT1 <= 10x (extreme overpayment check)",
+        "success": false,
+        "observed": "461 rows with ratio > 10x",
+        "expected": "0"
+      },
+      {
+        "check": "PAY_AMT2 / BILL_AMT2 <= 10x (extreme overpayment check)",
+        "success": false,
+        "observed": "512 rows with ratio > 10x",
+        "expected": "0"
+      },
+      {
+        "check": "PAY_AMT3 / BILL_AMT3 <= 10x (extreme overpayment check)",
+        "success": false,
+        "observed": "475 rows with ratio > 10x",
+        "expected": "0"
+      },
+      {
+        "check": "PAY_AMT4 / BILL_AMT4 <= 10x (extreme overpayment check)",
+        "success": false,
+        "observed": "404 rows with ratio > 10x",
+        "expected": "0"
+      },
+      {
+        "check": "PAY_AMT5 / BILL_AMT5 <= 10x (extreme overpayment check)",
+        "success": false,
+        "observed": "421 rows with ratio > 10x",
+        "expected": "0"
+      },
+      {
+        "check": "PAY_AMT6 / BILL_AMT6 <= 10x (extreme overpayment check)",
+        "success": false,
+        "observed": "496 rows with ratio > 10x",
+        "expected": "0"
+      }
+    ],
+    "3_Completeness": [
+      {
+        "check": "Row count = 30,000 (data size vs expected)",
+        "success": true,
+        "observed": "30000",
+        "expected": "30000"
+      },
+      {
+        "check": "No nulls in 'LIMIT_BAL'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'SEX'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'EDUCATION'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'MARRIAGE'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'AGE'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'PAY_0'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'PAY_2'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'PAY_3'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'PAY_4'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'PAY_5'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'PAY_6'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'BILL_AMT1'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'BILL_AMT2'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'BILL_AMT3'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'BILL_AMT4'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'BILL_AMT5'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'BILL_AMT6'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'PAY_AMT1'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'PAY_AMT2'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'PAY_AMT3'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'PAY_AMT4'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'PAY_AMT5'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'PAY_AMT6'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'default payment next month'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'avg_bill'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'avg_payment'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'max_delinquency'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'total_delinquency'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'avg_macro_CPI'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'avg_macro_GDP'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'avg_macro_TAIEX'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'avg_macro_rate'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      },
+      {
+        "check": "No nulls in 'avg_macro_unemp'",
+        "success": true,
+        "observed": "0 nulls (0.0%)",
+        "expected": "0 nulls (0.00%)"
+      }
+    ],
+    "4_Uniqueness": [
+      {
+        "check": "No exact duplicate rows (all columns identical)",
+        "success": false,
+        "observed": "35 exact duplicates",
+        "expected": "0"
+      },
+      {
+        "check": "Subset duplicate check on ['LIMIT_BAL', 'SEX', 'EDUCATION', 'MARRIAGE', 'AGE'] (informational)",
+        "success": true,
+        "observed": "24870 rows share the same demographic profile",
+        "expected": "expected to have some \u2014 informational only"
+      },
+      {
+        "check": "LIMIT_BAL has >= 10 distinct values (borrower diversity / fuzzy uniqueness proxy)",
+        "success": true,
+        "observed": "81 unique values",
+        "expected": ">= 10"
+      }
+    ],
+    "5_Outliers": [
+      {
+        "check": "Z-Score outliers (|z| > 3) across continuous columns \u2014 top 5 columns",
+        "success": true,
+        "observed": "total flagged=7747 | top cols: BILL_AMT1: 686 (2.29%), BILL_AMT4: 680 (2.27%), BILL_AMT2: 670 (2.23%), BILL_AMT3: 661 (2.2%), avg_bill: 660 (2.2%)",
+        "expected": "informational \u2014 review extreme values before modelling"
+      },
+      {
+        "check": "IQR outliers (Q1-1.5*IQR, Q3+1.5*IQR) across continuous columns \u2014 top 5",
+        "success": true,
+        "observed": "total flagged=38170 | top cols: PAY_AMT4: 2994 (9.98%), PAY_AMT6: 2958 (9.86%), PAY_AMT5: 2945 (9.82%), avg_payment: 2898 (9.66%), PAY_AMT1: 2745 (9.15%)",
+        "expected": "informational \u2014 skewed financial features expected to have IQR outliers"
+      },
+      {
+        "check": "Isolation Forest anomaly detection (contamination=0.05, 16 features)",
+        "success": true,
+        "observed": "1500 anomalies detected (5.0%)",
+        "expected": "~5% flagged by design \u2014 review multivariate outliers before modelling"
+      },
+      {
+        "check": "Outlier quality metric: % non-outlier values (IQR method, all numeric cols)",
+        "success": true,
+        "observed": "92.05% clean values",
+        "expected": ">= 80% non-outlier"
+      }
+    ],
+    "6_Timeliness": [
+      {
+        "check": "Discount Rate < 5.0% (pre-2010 CBC \u2014 ceiling catches wrong-period fetch)",
+        "success": true,
+        "observed": "mean=2.0625, 0 rows at or above ceiling",
+        "expected": "all values < 5.0"
+      },
+      {
+        "check": "TAIEX < 10,000 (pre-2010 TWSE \u2014 ceiling catches post-2008 bull market data)",
+        "success": true,
+        "observed": "mean=6071.1404, 0 rows at or above ceiling",
+        "expected": "all values < 10000"
+      },
+      {
+        "check": "Unemployment < 6.0% (pre-GFC ceiling \u2014 confirms 2005 DGBAS period)",
+        "success": true,
+        "observed": "mean=4.1, 0 rows at or above ceiling",
+        "expected": "all values < 6.0"
+      },
+      {
+        "check": "CPI < 200.0 (pre-2022 ceiling \u2014 catches 2022 inflation-era FRED data)",
+        "success": true,
+        "observed": "mean=195.1333, 0 rows at or above ceiling",
+        "expected": "all values < 200.0"
+      },
+      {
+        "check": "'avg_macro_CPI' has <= 6 distinct values (confirms 6-month window, no gap/duplicate months)",
+        "success": true,
+        "observed": "1 distinct values",
+        "expected": "<= 6 (one per observation month Apr-Sep 2005)"
+      },
+      {
+        "check": "'avg_macro_GDP' has <= 6 distinct values (confirms 6-month window, no gap/duplicate months)",
+        "success": true,
+        "observed": "1 distinct values",
+        "expected": "<= 6 (one per observation month Apr-Sep 2005)"
+      },
+      {
+        "check": "'avg_macro_TAIEX' has <= 6 distinct values (confirms 6-month window, no gap/duplicate months)",
+        "success": true,
+        "observed": "1 distinct values",
+        "expected": "<= 6 (one per observation month Apr-Sep 2005)"
+      },
+      {
+        "check": "'avg_macro_rate' has <= 6 distinct values (confirms 6-month window, no gap/duplicate months)",
+        "success": true,
+        "observed": "1 distinct values",
+        "expected": "<= 6 (one per observation month Apr-Sep 2005)"
+      },
+      {
+        "check": "'avg_macro_unemp' has <= 6 distinct values (confirms 6-month window, no gap/duplicate months)",
+        "success": true,
+        "observed": "1 distinct values",
+        "expected": "<= 6 (one per observation month Apr-Sep 2005)"
+      }
+    ],
+    "7_Distribution": [
+      {
+        "check": "'LIMIT_BAL' distribution profile",
+        "success": true,
+        "observed": "min=10000.00, max=1000000.00, mean=167484.32, median=140000.00, std=129747.66 | Q25=50000.00, Q75=240000.00 | skew=positive skew (0.993) | kurt=mesokurtic (excess=0.536) | cardinality=81",
+        "expected": "informational \u2014 use skew/kurt to decide transformations in preprocessing"
+      },
+      {
+        "check": "'AGE' distribution profile",
+        "success": true,
+        "observed": "min=21.00, max=79.00, mean=35.49, median=34.00, std=9.22 | Q25=28.00, Q75=41.00 | skew=positive skew (0.732) | kurt=mesokurtic (excess=0.044) | cardinality=56",
+        "expected": "informational \u2014 use skew/kurt to decide transformations in preprocessing"
+      },
+      {
+        "check": "'BILL_AMT1' distribution profile",
+        "success": true,
+        "observed": "min=-165580.00, max=964511.00, mean=51223.33, median=22381.50, std=73635.86 | Q25=3558.75, Q75=67091.00 | skew=positive skew (2.664) | kurt=leptokurtic (excess=9.804) | cardinality=22723",
+        "expected": "informational \u2014 use skew/kurt to decide transformations in preprocessing"
+      },
+      {
+        "check": "'BILL_AMT2' distribution profile",
+        "success": true,
+        "observed": "min=-69777.00, max=983931.00, mean=49179.08, median=21200.00, std=71173.77 | Q25=2984.75, Q75=64006.25 | skew=positive skew (2.705) | kurt=leptokurtic (excess=10.301) | cardinality=22346",
+        "expected": "informational \u2014 use skew/kurt to decide transformations in preprocessing"
+      },
+      {
+        "check": "'BILL_AMT3' distribution profile",
+        "success": true,
+        "observed": "min=-157264.00, max=1664089.00, mean=47013.15, median=20088.50, std=69349.39 | Q25=2666.25, Q75=60164.75 | skew=positive skew (3.088) | kurt=leptokurtic (excess=19.78) | cardinality=22026",
+        "expected": "informational \u2014 use skew/kurt to decide transformations in preprocessing"
+      },
+      {
+        "check": "'BILL_AMT4' distribution profile",
+        "success": true,
+        "observed": "min=-170000.00, max=891586.00, mean=43262.95, median=19052.00, std=64332.86 | Q25=2326.75, Q75=54506.00 | skew=positive skew (2.822) | kurt=leptokurtic (excess=11.307) | cardinality=21548",
+        "expected": "informational \u2014 use skew/kurt to decide transformations in preprocessing"
+      },
+      {
+        "check": "'BILL_AMT5' distribution profile",
+        "success": true,
+        "observed": "min=-81334.00, max=927171.00, mean=40311.40, median=18104.50, std=60797.16 | Q25=1763.00, Q75=50190.50 | skew=positive skew (2.876) | kurt=leptokurtic (excess=12.304) | cardinality=21010",
+        "expected": "informational \u2014 use skew/kurt to decide transformations in preprocessing"
+      },
+      {
+        "check": "'BILL_AMT6' distribution profile",
+        "success": true,
+        "observed": "min=-339603.00, max=961664.00, mean=38871.76, median=17071.00, std=59554.11 | Q25=1256.00, Q75=49198.25 | skew=positive skew (2.847) | kurt=leptokurtic (excess=12.268) | cardinality=20604",
+        "expected": "informational \u2014 use skew/kurt to decide transformations in preprocessing"
+      },
+      {
+        "check": "'PAY_AMT1' distribution profile",
+        "success": true,
+        "observed": "min=0.00, max=873552.00, mean=5663.58, median=2100.00, std=16563.28 | Q25=1000.00, Q75=5006.00 | skew=positive skew (14.668) | kurt=leptokurtic (excess=415.185) | cardinality=7943",
+        "expected": "informational \u2014 use skew/kurt to decide transformations in preprocessing"
+      },
+      {
+        "check": "'PAY_AMT2' distribution profile",
+        "success": true,
+        "observed": "min=0.00, max=1684259.00, mean=5921.16, median=2009.00, std=23040.87 | Q25=833.00, Q75=5000.00 | skew=positive skew (30.452) | kurt=leptokurtic (excess=1641.358) | cardinality=7899",
+        "expected": "informational \u2014 use skew/kurt to decide transformations in preprocessing"
+      },
+      {
+        "check": "'PAY_AMT3' distribution profile",
+        "success": true,
+        "observed": "min=0.00, max=896040.00, mean=5225.68, median=1800.00, std=17606.96 | Q25=390.00, Q75=4505.00 | skew=positive skew (17.216) | kurt=leptokurtic (excess=564.217) | cardinality=7518",
+        "expected": "informational \u2014 use skew/kurt to decide transformations in preprocessing"
+      },
+      {
+        "check": "'PAY_AMT4' distribution profile",
+        "success": true,
+        "observed": "min=0.00, max=621000.00, mean=4826.08, median=1500.00, std=15666.16 | Q25=296.00, Q75=4013.25 | skew=positive skew (12.904) | kurt=leptokurtic (excess=277.287) | cardinality=6937",
+        "expected": "informational \u2014 use skew/kurt to decide transformations in preprocessing"
+      },
+      {
+        "check": "'PAY_AMT5' distribution profile",
+        "success": true,
+        "observed": "min=0.00, max=426529.00, mean=4799.39, median=1500.00, std=15278.31 | Q25=252.50, Q75=4031.50 | skew=positive skew (11.127) | kurt=leptokurtic (excess=180.034) | cardinality=6897",
+        "expected": "informational \u2014 use skew/kurt to decide transformations in preprocessing"
+      },
+      {
+        "check": "'PAY_AMT6' distribution profile",
+        "success": true,
+        "observed": "min=0.00, max=528666.00, mean=5215.50, median=1500.00, std=17777.47 | Q25=117.75, Q75=4000.00 | skew=positive skew (10.64) | kurt=leptokurtic (excess=167.133) | cardinality=6939",
+        "expected": "informational \u2014 use skew/kurt to decide transformations in preprocessing"
+      },
+      {
+        "check": "'avg_bill' distribution profile",
+        "success": true,
+        "observed": "min=-56043.17, max=877313.83, mean=44976.95, median=21051.83, std=63260.72 | Q25=4781.33, Q75=57104.42 | skew=positive skew (2.735) | kurt=leptokurtic (excess=10.522) | cardinality=27370",
+        "expected": "informational \u2014 use skew/kurt to decide transformations in preprocessing"
+      },
+      {
+        "check": "'avg_payment' distribution profile",
+        "success": true,
+        "observed": "min=0.00, max=627344.33, mean=5275.23, median=2397.17, std=10137.95 | Q25=1113.29, Q75=5583.92 | skew=positive skew (14.616) | kurt=leptokurtic (excess=607.655) | cardinality=19180",
+        "expected": "informational \u2014 use skew/kurt to decide transformations in preprocessing"
+      },
+      {
+        "check": "KS test \u2014 'LIMIT_BAL' vs normal distribution (p >= 0.05 -> normal-like)",
+        "success": false,
+        "observed": "KS stat=0.1151, p=0.0",
+        "expected": "p >= 0.05 for normal-like; p < 0.05 -> non-normal -> consider log/power transform"
+      },
+      {
+        "check": "KS test \u2014 'AGE' vs normal distribution (p >= 0.05 -> normal-like)",
+        "success": false,
+        "observed": "KS stat=0.0944, p=0.0",
+        "expected": "p >= 0.05 for normal-like; p < 0.05 -> non-normal -> consider log/power transform"
+      },
+      {
+        "check": "KS test \u2014 'BILL_AMT1' vs normal distribution (p >= 0.05 -> normal-like)",
+        "success": false,
+        "observed": "KS stat=0.2367, p=0.0",
+        "expected": "p >= 0.05 for normal-like; p < 0.05 -> non-normal -> consider log/power transform"
+      },
+      {
+        "check": "KS test \u2014 'BILL_AMT2' vs normal distribution (p >= 0.05 -> normal-like)",
+        "success": false,
+        "observed": "KS stat=0.2369, p=0.0",
+        "expected": "p >= 0.05 for normal-like; p < 0.05 -> non-normal -> consider log/power transform"
+      },
+      {
+        "check": "KS test \u2014 'BILL_AMT3' vs normal distribution (p >= 0.05 -> normal-like)",
+        "success": false,
+        "observed": "KS stat=0.24, p=0.0",
+        "expected": "p >= 0.05 for normal-like; p < 0.05 -> non-normal -> consider log/power transform"
+      },
+      {
+        "check": "KS test \u2014 'BILL_AMT4' vs normal distribution (p >= 0.05 -> normal-like)",
+        "success": false,
+        "observed": "KS stat=0.2408, p=0.0",
+        "expected": "p >= 0.05 for normal-like; p < 0.05 -> non-normal -> consider log/power transform"
+      },
+      {
+        "check": "KS test \u2014 'BILL_AMT5' vs normal distribution (p >= 0.05 -> normal-like)",
+        "success": false,
+        "observed": "KS stat=0.2435, p=0.0",
+        "expected": "p >= 0.05 for normal-like; p < 0.05 -> non-normal -> consider log/power transform"
+      },
+      {
+        "check": "KS test \u2014 'BILL_AMT6' vs normal distribution (p >= 0.05 -> normal-like)",
+        "success": false,
+        "observed": "KS stat=0.2458, p=0.0",
+        "expected": "p >= 0.05 for normal-like; p < 0.05 -> non-normal -> consider log/power transform"
+      },
+      {
+        "check": "KS test \u2014 'PAY_AMT1' vs normal distribution (p >= 0.05 -> normal-like)",
+        "success": false,
+        "observed": "KS stat=0.3662, p=0.0",
+        "expected": "p >= 0.05 for normal-like; p < 0.05 -> non-normal -> consider log/power transform"
+      },
+      {
+        "check": "KS test \u2014 'PAY_AMT2' vs normal distribution (p >= 0.05 -> normal-like)",
+        "success": false,
+        "observed": "KS stat=0.3986, p=0.0",
+        "expected": "p >= 0.05 for normal-like; p < 0.05 -> non-normal -> consider log/power transform"
+      },
+      {
+        "check": "KS test \u2014 'PAY_AMT3' vs normal distribution (p >= 0.05 -> normal-like)",
+        "success": false,
+        "observed": "KS stat=0.3833, p=0.0",
+        "expected": "p >= 0.05 for normal-like; p < 0.05 -> non-normal -> consider log/power transform"
+      },
+      {
+        "check": "KS test \u2014 'PAY_AMT4' vs normal distribution (p >= 0.05 -> normal-like)",
+        "success": false,
+        "observed": "KS stat=0.379, p=0.0",
+        "expected": "p >= 0.05 for normal-like; p < 0.05 -> non-normal -> consider log/power transform"
+      },
+      {
+        "check": "KS test \u2014 'PAY_AMT5' vs normal distribution (p >= 0.05 -> normal-like)",
+        "success": false,
+        "observed": "KS stat=0.3767, p=0.0",
+        "expected": "p >= 0.05 for normal-like; p < 0.05 -> non-normal -> consider log/power transform"
+      },
+      {
+        "check": "KS test \u2014 'PAY_AMT6' vs normal distribution (p >= 0.05 -> normal-like)",
+        "success": false,
+        "observed": "KS stat=0.3846, p=0.0",
+        "expected": "p >= 0.05 for normal-like; p < 0.05 -> non-normal -> consider log/power transform"
+      },
+      {
+        "check": "KS test \u2014 'avg_bill' vs normal distribution (p >= 0.05 -> normal-like)",
+        "success": false,
+        "observed": "KS stat=0.234, p=0.0",
+        "expected": "p >= 0.05 for normal-like; p < 0.05 -> non-normal -> consider log/power transform"
+      },
+      {
+        "check": "KS test \u2014 'avg_payment' vs normal distribution (p >= 0.05 -> normal-like)",
+        "success": false,
+        "observed": "KS stat=0.3014, p=0.0",
+        "expected": "p >= 0.05 for normal-like; p < 0.05 -> non-normal -> consider log/power transform"
+      },
+      {
+        "check": "Default rate in [20%, 25%] (published Yeh 2009: ~22.1%)",
+        "success": true,
+        "observed": "0.2212 (22.1%)",
+        "expected": "[0.20, 0.25]"
+      },
+      {
+        "check": "Minority class (defaulters) > 10% \u2014 no extreme imbalance",
+        "success": true,
+        "observed": "defaulters=6636 (22.1%)",
+        "expected": "> 10%"
+      },
+      {
+        "check": "Mean AGE in [30, 41] (published Yeh 2009: ~35.5)",
+        "success": true,
+        "observed": "35.49",
+        "expected": "[30, 41]"
+      },
+      {
+        "check": "Mean LIMIT_BAL in [100K, 250K NTD] (published Yeh 2009: ~167K)",
+        "success": true,
+        "observed": "167484.0",
+        "expected": "[100000, 250000]"
+      },
+      {
+        "check": "'PAY_0': >= 50% on-time (value <= 0) \u2014 majority of borrowers pay on time",
+        "success": true,
+        "observed": "77.27% on time",
+        "expected": ">= 50%"
+      },
+      {
+        "check": "'PAY_2': >= 50% on-time (value <= 0) \u2014 majority of borrowers pay on time",
+        "success": true,
+        "observed": "85.21% on time",
+        "expected": ">= 50%"
+      }
+    ],
+    "8_Relationships": [
+      {
+        "check": "Pearson vs Spearman: 'LIMIT_BAL' \u2194 'avg_bill' (\u0394 > 0.1 -> non-linear relationship)",
+        "success": false,
+        "observed": "Pearson=0.302, Spearman=0.0919, \u0394=0.210",
+        "expected": "\u0394 <= 0.1 (linear); \u0394 > 0.1 signals non-linear -> use Spearman"
+      },
+      {
+        "check": "Pearson vs Spearman: 'LIMIT_BAL' \u2194 'avg_payment' (\u0394 > 0.1 -> non-linear relationship)",
+        "success": true,
+        "observed": "Pearson=0.3527, Spearman=0.4018, \u0394=0.049",
+        "expected": "\u0394 <= 0.1 (linear); \u0394 > 0.1 signals non-linear -> use Spearman"
+      },
+      {
+        "check": "Pearson vs Spearman: 'avg_bill' \u2194 'avg_payment' (\u0394 > 0.1 -> non-linear relationship)",
+        "success": false,
+        "observed": "Pearson=0.3439, Spearman=0.5973, \u0394=0.253",
+        "expected": "\u0394 <= 0.1 (linear); \u0394 > 0.1 signals non-linear -> use Spearman"
+      },
+      {
+        "check": "Pearson vs Spearman: 'AGE' \u2194 'LIMIT_BAL' (\u0394 > 0.1 -> non-linear relationship)",
+        "success": true,
+        "observed": "Pearson=0.1447, Spearman=0.1865, \u0394=0.042",
+        "expected": "\u0394 <= 0.1 (linear); \u0394 > 0.1 signals non-linear -> use Spearman"
+      },
+      {
+        "check": "Pearson vs Spearman: 'total_delinquency' \u2194 'max_delinquency' (\u0394 > 0.1 -> non-linear relationship)",
+        "success": false,
+        "observed": "Pearson=0.8493, Spearman=0.9883, \u0394=0.139",
+        "expected": "\u0394 <= 0.1 (linear); \u0394 > 0.1 signals non-linear -> use Spearman"
+      },
+      {
+        "check": "No highly collinear feature pairs (|Pearson r| > 0.9) \u2014 destabilises models",
+        "success": false,
+        "observed": "6 pairs: ['BILL_AMT1\u2194BILL_AMT2 (r=0.951)', 'BILL_AMT2\u2194BILL_AMT3 (r=0.928)', 'BILL_AMT3\u2194BILL_AMT4 (r=0.924)', 'BILL_AMT4\u2194BILL_AMT5 (r=0.940)', 'BILL_AMT4\u2194BILL_AMT6 (r=0.901)']",
+        "expected": "0 pairs with |r| > 0.9"
+      },
+      {
+        "check": "'PAY_0' positively correlated with default target (expected \u2014 delinquency predicts default)",
+        "success": true,
+        "observed": "Pearson=0.3248, Spearman=0.2922",
+        "expected": "Pearson > 0 (delinquency -> higher default risk)"
+      },
+      {
+        "check": "'PAY_2' positively correlated with default target (expected \u2014 delinquency predicts default)",
+        "success": true,
+        "observed": "Pearson=0.2636, Spearman=0.2169",
+        "expected": "Pearson > 0 (delinquency -> higher default risk)"
+      },
+      {
+        "check": "'total_delinquency' positively correlated with default target (expected \u2014 delinquency predicts default)",
+        "success": true,
+        "observed": "Pearson=0.376, Spearman=0.3904",
+        "expected": "Pearson > 0 (delinquency -> higher default risk)"
+      },
+      {
+        "check": "'max_delinquency' positively correlated with default target (expected \u2014 delinquency predicts default)",
+        "success": true,
+        "observed": "Pearson=0.3704, Spearman=0.3728",
+        "expected": "Pearson > 0 (delinquency -> higher default risk)"
+      },
+      {
+        "check": "LIMIT_BAL negatively correlated with default (higher credit limit -> lower default risk)",
+        "success": true,
+        "observed": "Pearson=-0.1535",
+        "expected": "Pearson < 0"
+      }
+    ],
+    "9_Integrity": [
+      {
+        "check": "All expected columns present",
+        "success": true,
+        "observed": "none missing",
+        "expected": "33 columns"
+      },
+      {
+        "check": "Column count in [33, 38] (allows up to +5 extra cols)",
+        "success": true,
+        "observed": "33",
+        "expected": "[33, 38]"
+      },
+      {
+        "check": "Row count = 30,000 (no merge fan-out)",
+        "success": true,
+        "observed": "30000",
+        "expected": "30000"
+      },
+      {
+        "check": "Target column is binary {0, 1}",
+        "success": true,
+        "observed": "0 non-binary values",
+        "expected": "0"
+      },
+      {
+        "check": "All columns are numeric (no object dtype from merge artefacts)",
+        "success": true,
+        "observed": "none",
+        "expected": "none"
+      }
+    ]
+  },
+  "quality_metrics": {
+    "Completeness": {
+      "formula": "(non-null values / total values) x 100%",
+      "value": 100.0,
+      "unit": "%"
+    },
+    "Uniqueness": {
+      "formula": "(unique records / total records) x 100%",
+      "value": 99.8833,
+      "unit": "%"
+    },
+    "Accuracy": {
+      "formula": "(passed accuracy checks / total accuracy checks) x 100%",
+      "value": 100.0,
+      "unit": "%"
+    },
+    "Consistency": {
+      "formula": "(conforming records checks / total consistency checks) x 100%",
+      "value": 40.0,
+      "unit": "%"
+    },
+    "Outliers": {
+      "formula": "(non-outlier values / total values) x 100%  [IQR method]",
+      "value": 92.0479,
+      "unit": "%"
+    },
+    "Timeliness": {
+      "formula": "mean time from event to availability -> % timeliness checks passed",
+      "value": 100.0,
+      "unit": "%"
+    },
+    "Distribution": {
+      "formula": "mean KS statistic across numeric columns (0=identical to normal, 1=completely different)",
+      "value": 0.2798,
+      "unit": "KS statistic"
+    },
+    "Relationships": {
+      "formula": "mean |Spearman r| for key feature-to-target pairs",
+      "value": 0.2841,
+      "unit": "Spearman |r|"
+    }
+  }
+}

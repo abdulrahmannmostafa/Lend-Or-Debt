@@ -1,0 +1,8 @@
+# Our env file
+.env
+
+# Ignore the .venv file which contains our environment variables
+.venv
+
+# Ignore pycache
+**/**/__pycache__/
