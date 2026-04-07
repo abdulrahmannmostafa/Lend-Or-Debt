@@ -12,7 +12,7 @@ acquisition:
 	@echo ">>> Data acquisition is completed"
 
 validation:
-	@echo ">>> Running validation pipeline..."
+	@echo ">>> Running data validation script..."
 	poetry run python -m src.pipeline.data_validation
 	@echo ">>> Data validation is completed"
 
