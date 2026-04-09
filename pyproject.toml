@@ -37,5 +37,6 @@ build-backend = "poetry.core.masonry.api"
 
 [dependency-groups]
 dev = [
-    "types-requests (>=2.33.0.20260408,<3.0.0.0)"
+    "types-requests (>=2.33.0.20260408,<3.0.0.0)",
+    "pytest-cov (>=7.1.0,<8.0.0)"
 ]
