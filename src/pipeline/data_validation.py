@@ -1211,3 +1211,10 @@ def run_validation(
 
 if __name__ == "__main__":
     run_validation()
+
+if __name__ != "__main__":
+    try:
+        if Path("data/taiwan_merged.csv").exists():
+            run_validation()
+    except Exception as e:
+        log.warning(f"Auto-validation failed during import: {e}")
