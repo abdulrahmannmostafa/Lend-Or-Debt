@@ -1,4 +1,4 @@
-# 🚀 Data Science Project
+#  Data Science Project
 
 _A production-style end-to-end data pipeline for acquisition, validation, and analysis._
 
