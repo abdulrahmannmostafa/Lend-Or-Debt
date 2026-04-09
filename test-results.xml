@@ -1,1 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="0" skipped="0" tests="1" time="4.798" timestamp="2026-04-09T16:37:05.519198+02:00" hostname="Abdelrahman"><testcase classname="tests.unit.dummy_test" name="test_import" time="0.002" /></testsuite></testsuites>
