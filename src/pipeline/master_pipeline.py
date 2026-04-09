@@ -2,7 +2,6 @@ import argparse
 import logging
 import sys
 import time
-from pathlib import Path
 
 
 from src.pipeline.data_acquisition import run_acquisition  # Phase 1

@@ -27,7 +27,7 @@ def scrape_unemployment(save_path: str = "../data/unemployment_2005.csv"):
 
     print("Downloading unemployment XML from DGBAS open data portal...")
     response = requests.get(xml_url, headers=headers, timeout=30, verify=False)
-    print(f"Status: {response.status_code} | Size: {len(response.content)} bytes")
+    print("Status: {response.status_code} | Size: {len(response.content)} bytes")
 
     # Parse XML
     root = ET.fromstring(response.content)
@@ -46,11 +46,11 @@ def scrape_unemployment(save_path: str = "../data/unemployment_2005.csv"):
         records.append({"period": period, "Unemployment_Rate": taiwan_rate})
 
     df_all = pd.DataFrame(records)
-    print(f"\nTotal records in XML: {len(df_all)}")
+    print("\nTotal records in XML: {len(df_all)}")
 
     # Filter to 2005 semi annual periods only to ensure we have the correct mapping for April-September 2005
     df_2005 = df_all[df_all["period"].str.startswith("2005")].copy()
-    print(f"\n2005 records found:")
+    print("\n2005 records found:")
     print(df_2005.to_string(index=False))
 
     # Map semi-annual periods to individual months
@@ -63,8 +63,8 @@ def scrape_unemployment(save_path: str = "../data/unemployment_2005.csv"):
         0
     ]
 
-    print(f"\n2005 H1 (Jan-June) rate: {rate_h1}%")
-    print(f"2005 H2 (July-Dec) rate: {rate_h2}%")
+    print("\n2005 H1 (Jan-June) rate: {rate_h1}%")
+    print("2005 H2 (July-Dec) rate: {rate_h2}%")
 
     # Build monthly dataframe
     monthly_data = {
@@ -92,7 +92,7 @@ def scrape_unemployment(save_path: str = "../data/unemployment_2005.csv"):
 
     df_monthly.to_csv(save_path, index=False)
 
-    print(f"\nUnemployment data saved: {df_monthly.shape} -> {save_path}")
+    print("\nUnemployment data saved: {df_monthly.shape} -> {save_path}")
     print(df_monthly.to_string(index=False))
 
     return df_monthly

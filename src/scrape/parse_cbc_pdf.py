@@ -31,8 +31,6 @@ def parse_cbc_rates(save_path: str = "../data/cbc_rates_2005.csv"):
     pdf_local = "../data/cbc_annual_report_2007.pdf"
     os.makedirs(os.path.dirname(pdf_local), exist_ok=True)
 
-    pdf_parsed = False
-
     try:
         print("Attempting to download CBC Annual Report PDF...")
         response = requests.get(
@@ -44,7 +42,6 @@ def parse_cbc_rates(save_path: str = "../data/cbc_rates_2005.csv"):
             response.headers.get("Content-Type", "").startswith("application/pdf")
             or response.content[:4] == b"%PDF"
         ):
-
             with open(pdf_local, "wb") as f:
                 f.write(response.content)
             print(f"PDF downloaded -> {pdf_local}")
@@ -59,9 +56,8 @@ def parse_cbc_rates(save_path: str = "../data/cbc_rates_2005.csv"):
                     if (
                         "discount" in text.lower() and "2005" in text
                     ):  # Heuristic to find relevant page (if we find a page mentioning discount rates and 2005, it's likely the right one)
-                        print(f"\nFound relevant content on page {i+1}:")
+                        print(f"\nFound relevant content on page {i + 1}:")
                         print(text[:600])
-                        pdf_parsed = True
                         break
 
         else:

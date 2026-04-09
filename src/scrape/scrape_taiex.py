@@ -41,7 +41,7 @@ def scrape_taiex(save_path: str = "../data/taiex_2005.csv"):
         .reset_index()
     )
 
-    print(f"\nMonthly TAIEX data:")
+    print("\nMonthly TAIEX data:")
     print(taiex_monthly)
 
     taiex_monthly.to_csv(save_path, index=False)

@@ -6,6 +6,31 @@ help:
 	@echo "  make validation  - Run the validation pipeline"
 	@echo "  make pipeline    - Run the full pipeline of all phases"
 
+lint:
+	@echo ">>> Running code linting..."
+	poetry run poetry run ruff check src/
+	@echo ">>> Code linting is completed"
+
+format:
+	@echo ">>> Running code formatting..."
+	poetry run ruff format src/
+	@echo ">>> Code formatting is completed"
+
+sta:
+	@echo ">>> Running static type analysis..."
+	poetry run mypy src/
+	@echo ">>> Static type analysis is completed"
+
+unit:
+	@echo ">>> Running unit tests..."
+	poetry run pytest tests/unit/
+	@echo ">>> Unit tests are completed"
+
+integration:
+	@echo ">>> Running integration tests..."
+	poetry run pytest tests/integration/
+	@echo ">>> Integration tests are completed"
+
 acquisition:
 	@echo ">>> Running data acquisition script..."
 	poetry run python -m src.pipeline.data_acquisition

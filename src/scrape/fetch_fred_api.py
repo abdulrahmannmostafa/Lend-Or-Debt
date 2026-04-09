@@ -39,5 +39,8 @@ def fetch_macro_data(api_key: str, save_path: str = "../data/macro_fred.csv"):
 
 if __name__ == "__main__":
     load_dotenv()
+    api_key = os.getenv("FRED_API_KEY")
 
-    fetch_macro_data(os.getenv("FRED_API_KEY"))
+    if not api_key:
+        raise ValueError("FRED API key is required in the .env file")
+    fetch_macro_data(api_key=api_key)
