@@ -10,11 +10,6 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-# Single source of truth mapping each calendar month to its corresponding columns in the Taiwan dataset.
-# PAY_1 does NOT exist in the UCI dataset — known upstream data issue
-# The dataset jumps directly from PAY_0 (September) to PAY_2 (August).
-# every borrower's rows run chronologically: iloc[0]=Apr, iloc[-1]=Sep.
-# Tuple format: (calendar_month, pay_col, bill_col, payamt_col)
 MONTH_PANEL = [
     (4, "PAY_6", "BILL_AMT6", "PAY_AMT6"),  # April 2005
     (5, "PAY_5", "BILL_AMT5", "PAY_AMT5"),  # May 2005
@@ -23,10 +18,6 @@ MONTH_PANEL = [
     (8, "PAY_2", "BILL_AMT2", "PAY_AMT2"),  # August 2005
     (9, "PAY_0", "BILL_AMT1", "PAY_AMT1"),  # September 2005
 ]
-
-
-# Loaders
-# ---------------------------------------------------------------------------
 
 
 def _load_taiwan(path: str) -> pd.DataFrame:
@@ -76,26 +67,9 @@ def _load_macro_sources(
     return macro, taiex, cbc, unemploy
 
 
-# Panel builder
-# ---------------------------------------------------------------------------
-
-
 def _build_panel(taiwan: pd.DataFrame) -> pd.DataFrame:
     """
-    Melt the wide-format Taiwan dataset into a long-format panel.
-
-    Each of the 30,000 borrowers produces 6 rows — one per observation month
-    (April through September 2005).  Expected output: 180,000 rows x 6 cols.
-
-    WHY THIS STEP IS NECESSARY:
-    The macro time-series files (CPI, TAIEX, etc.) have one value per month.
-    If we merge on the borrower level directly, every borrower gets the same
-    single value regardless of timing — zero variance, zero predictive power.
-    By melting to long format first, each borrower-month row can receive the
-    exact macro value for that specific calendar month.
-
-    The panel is sorted by [ID, Month] immediately so that within every
-    borrower group, rows always run April -> September in order for ease of merging
+    Melt the wide-format Taiwan dataset into a long format panel
     """
     log.info("Building long-format panel...")
     records = []
@@ -118,10 +92,6 @@ def _build_panel(taiwan: pd.DataFrame) -> pd.DataFrame:
 
     log.info("Panel built: %s rows x %s cols (expected 180,000 x 6)", *panel.shape)
     return panel
-
-
-# Macro merge
-# ---------------------------------------------------------------------------
 
 
 def _merge_macro(
@@ -175,25 +145,6 @@ def _recode_pay_status(panel: pd.DataFrame) -> pd.DataFrame:
     """
     Add PAY_STATUS_clean by clipping PAY_STATUS to a floor of 0
 
-    UCI repayment status encoding:
-        -2  no consumption  (account unused this month)
-        -1  paid in full    (entire balance cleared)
-         0  revolving       (minimum payment made, balance carried forward)
-         1  delay 1 month
-         ...
-         8  delay 8 months
-
-    WHY CLIPPING IS NECESSARY FOR AGGREGATIONS:
-    sum() and max() treat -2 and -1 as numerically negative, which corrupts
-    delinquency aggregations:
-        - A borrower with five -2 months and one +3 delay gets a lower sum
-          than one with six 0 months, making the risky borrower appear safer
-        - max() on [-2, -1, -1, -1, -1, -1] returns -1, suggesting the
-        borrower's "worst" month was a paid-in-full month
-
-    Clipping maps -2 and -1 -> 0 (no delinquency) and leaves 1–8 unchanged
-    Now sum() = total months delayed and max() = worst single-month delay
-
     """
     panel = panel.copy()
     panel["PAY_STATUS_clean"] = panel["PAY_STATUS"].clip(
@@ -202,25 +153,9 @@ def _recode_pay_status(panel: pd.DataFrame) -> pd.DataFrame:
     return panel
 
 
-# Behaviour aggregation
-# ---------------------------------------------------------------------------
-
-
 def _aggregate_behaviour(panel: pd.DataFrame) -> pd.DataFrame:
     """
     Aggregate the long-format panel back to one row per borrower
-
-    This is not a data transformation step — it is an aggregation step only:
-    Only behaviour aggregations that are direct summaries of the raw panel
-    data belong here.  These are not analytical decisions, they are just
-    collapsing 6 rows per borrower into a single representative value
-
-    (N.B) They all have the same means across borrowers:
-    Because every borrower shares the same 6 months, these averages will be
-    identical across all 30,000 borrowers — zero variance.  They are included
-    here so the validation step can verify their plausibility against known
-    2005 Taiwan ranges.  The transformation step will drop pure averages and
-    replace them with interaction features that have good per-borrower variance.
     """
     log.info("Aggregating panel to borrower level...")
 
@@ -244,10 +179,6 @@ def _aggregate_behaviour(panel: pd.DataFrame) -> pd.DataFrame:
     return agg
 
 
-# Main pipeline
-# ---------------------------------------------------------------------------
-
-
 def build_final_dataset(
     taiwan_path: str = "../data/default of credit card clients.xls",
     macro_path: str = "../data/macro_fred.csv",
@@ -258,18 +189,6 @@ def build_final_dataset(
 ) -> pd.DataFrame:
     """
     Data acquisition pipeline — builds and saves the raw merged dataset
-
-    Pipeline steps
-    --------------
-    1.  Load Taiwan wide-format data          (30,000 x 25 expected)
-    2.  Extract static borrower frame         (all original PAY_*, BILL_AMT*, PAY_AMT*, demographics, target)
-    3.  Melt into long-format panel           (180,000 x 6 expected)
-    4.  Merge four macro sources on           [Year, Month]
-    5.  Sort panel by [ID, Month]             (logically per borrower)
-    6.  Add PAY_STATUS_clean                  (clipped to 0 floor)
-    7.  Aggregate panel -> behaviour features (one row per borrower)
-    8.  Merge engineered features onto static frame (N.B: adds columns, not replaces originals)
-    9.  Drop ID (join key only) and save
     """
 
     # Step 1
