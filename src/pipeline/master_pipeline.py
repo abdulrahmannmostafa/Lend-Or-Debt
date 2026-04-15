@@ -7,7 +7,7 @@ import time
 from src.pipeline.data_acquisition import run_acquisition  # Phase 1
 from src.pipeline.data_validation import run_validation  # Phase 2
 
-# from src.pipeline.data_cleaning import run_transformation   # Phase 3  <- uncomment when ready
+from src.pipeline.data_cleaning import clean_data                   # Phase 3  <- uncomment when ready
 # from src.pipeline.data_transformation import run_transformation   # Phase 4  <- uncomment when ready
 # from src.pipeline.model_training       import run_training        # Phase 5  <- uncomment when ready
 # from src.pipeline.model_evaluation     import run_evaluation      # Phase 6  <- uncomment when ready
@@ -43,6 +43,17 @@ _PHASES: list[dict] = [
         },
     },
     # Phase 3 — Data Cleaning              (add when ready)
+
+    {
+        "name": "3 | Data Cleaning",
+        "fn": clean_data,
+        "kwargs": {
+            "input_path": "data/taiwan_merged.csv",
+            "train_output": "data/clean/train_cleaned.csv",
+            "val_output": "data/clean/val_cleaned.csv",
+            "test_output": "data/clean/test_cleaned.csv",
+        },
+    }
     # Phase 4 — Data Transformation        (add when ready)
     # Phase 5 — Model Training             (add when ready)
     # Phase 6 — Model Evaluation           (add when ready)
