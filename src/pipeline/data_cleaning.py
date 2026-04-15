@@ -2,8 +2,7 @@ import numpy as np
 import pandas as pd
 import logging
 from pathlib import Path
-from sklearn.preprocessing import StandardScaler, PowerTransformer
-from imblearn.over_sampling import SMOTE
+from sklearn.preprocessing import PowerTransformer
 from sklearn.model_selection import train_test_split
 
 logging.basicConfig(
@@ -222,44 +221,6 @@ def split_dataset(
     return train_df, val_df, test_df
 
 
-
-def handle_data_imbalance(
-    train_df: pd.DataFrame,
-    target_col: str,
-    random_state: int = 42,
-    k_neighbors: int = 5,
-) -> pd.DataFrame:
-    """
-    Apply SMOTE directly on an already prepared training dataframe.
-    """
-    log.info("Applying SMOTE on provided training dataframe...")
-
-    if target_col not in train_df.columns:
-        raise ValueError(f"Target column '{target_col}' not found in dataframe.")
-
-    X_train = train_df.drop(columns=[target_col])
-    y_train = train_df[target_col]
-
-    smote = SMOTE(random_state=random_state, k_neighbors=k_neighbors)
-    X_resampled, y_resampled = smote.fit_resample(X_train, y_train)
-
-    # Preserve pandas structures for downstream feature engineering/modeling.
-    X_resampled = pd.DataFrame(X_resampled, columns=X_train.columns)
-    y_name = y_train.name if hasattr(y_train, "name") and y_train.name else "target"
-    y_resampled = pd.Series(y_resampled, name=y_name)
-    resampled_df = X_resampled.copy()
-    resampled_df[y_name] = y_resampled
-
-    before_counts = y_train.value_counts().to_dict()
-    after_counts = y_resampled.value_counts().to_dict()
-    log.info(f"Class distribution before SMOTE: {before_counts}")
-    log.info(f"Class distribution after SMOTE: {after_counts}")
-
-    return resampled_df
-
-
-
-
 # =========================================================
 # CLEANING STEP
 # =========================================================
@@ -285,8 +246,6 @@ def clean_data(
     train_df, val_df, test_df = handle_outliers(train_df, val_df, test_df)
     log.info("--- Step 4: Handle distribution (Yeo-Johnson power transform) ---")
     train_df, val_df, test_df = handle_distribution(train_df, val_df, test_df)
-    log.info("--- Step 5: Handle data imbalance (SMOTE) ---")
-    train_df = handle_data_imbalance(train_df, target_col=TARGET_COL)
 
     # save outputs
     Path(train_output).parent.mkdir(parents=True, exist_ok=True)
@@ -310,7 +269,9 @@ if __name__ == "__main__":
 if __name__ != "__main__":
     try:
         if Path("data/taiwan_merged.csv").exists():
-            _raw = pd.read_csv("data/taiwan_merged.csv")
-            clean_data(_raw)
+            clean_data(        input_path="data/taiwan_merged.csv",
+        train_output="data/clean/train_cleaned.csv",
+        val_output="data/clean/val_cleaned.csv",
+        test_output="data/clean/test_cleaned.csv",)
     except Exception as _e:
         log.warning("Auto-run during import failed: %s", _e)
