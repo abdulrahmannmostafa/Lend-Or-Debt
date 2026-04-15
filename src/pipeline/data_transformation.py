@@ -1,4 +1,3 @@
-import numpy as np
 import pandas as pd
 import logging
 from pathlib import Path
@@ -278,7 +277,7 @@ def engineer_macro_interactions(df: pd.DataFrame) -> pd.DataFrame:
         created.append("unemp_x_delinquency")
 
     # Step 7: Drop raw macro columns
-    
+
     df = df.drop(columns=macro_cols)
 
     log.info(
