@@ -44,6 +44,7 @@ def remap_categorical_codes(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
+
 def recode_pay_status(df: pd.DataFrame) -> pd.DataFrame:
     """
     Recode PAY status columns to a monotonically ordinal scale.
@@ -97,8 +98,11 @@ def recode_pay_status(df: pd.DataFrame) -> pd.DataFrame:
         log.info(
             "recode_pay_status [%s]: %d negative values before → %d after; "
             "new range [%d, %d].",
-            col, before_neg, after_neg,
-            int(df[col].min()), int(df[col].max()),
+            col,
+            before_neg,
+            after_neg,
+            int(df[col].min()),
+            int(df[col].max()),
         )
 
     log.info(
@@ -138,8 +142,8 @@ def engineer_credit_features(df: pd.DataFrame) -> pd.DataFrame:
 
     if "avg_bill" in df.columns and "LIMIT_BAL" in df.columns:
         df["utilisation_ratio"] = df["avg_bill"] / (df["LIMIT_BAL"] + 1)
-        df["LIMIT_BAL_sq"]      = df["LIMIT_BAL"] ** 2
-        df["limit_x_bill"]      = df["LIMIT_BAL"] * df["avg_bill"]
+        df["LIMIT_BAL_sq"] = df["LIMIT_BAL"] ** 2
+        df["limit_x_bill"] = df["LIMIT_BAL"] * df["avg_bill"]
         log.info(
             "Credit features added: utilisation_ratio, LIMIT_BAL_sq, limit_x_bill."
         )
@@ -181,9 +185,9 @@ def engineer_payment_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
     if "avg_payment" in df.columns and "avg_bill" in df.columns:
-        df["payment_ratio"]      = df["avg_payment"] / (df["avg_bill"] + 1)
+        df["payment_ratio"] = df["avg_payment"] / (df["avg_bill"] + 1)
         df["avg_unpaid_balance"] = df["avg_bill"] - df["avg_payment"]
-        df["is_underpaying"]     = (df["avg_payment"] < df["avg_bill"]).astype(int)
+        df["is_underpaying"] = (df["avg_payment"] < df["avg_bill"]).astype(int)
         log.info(
             "Payment features added: payment_ratio, avg_unpaid_balance, is_underpaying."
         )
@@ -205,7 +209,7 @@ def engineer_macro_interactions(df: pd.DataFrame) -> pd.DataFrame:
     - Add one normalized risk feature (capacity-aware)
 
     Created features:
-        cpi_risk_norm        = CPI × total_delinquency / LIMIT_BAL 
+        cpi_risk_norm        = CPI × total_delinquency / LIMIT_BAL
         captures -> Is this person struggling under high cost of living relative to their credit capacity?
 
         gdp_x_payment_ratio  = GDP × payment_ratio
@@ -227,7 +231,8 @@ def engineer_macro_interactions(df: pd.DataFrame) -> pd.DataFrame:
     # Step 1: Check macro columns
     # ===============================
     macro_cols = [
-        c for c in [
+        c
+        for c in [
             "avg_macro_CPI",
             "avg_macro_GDP",
             "avg_macro_TAIEX",
@@ -244,7 +249,6 @@ def engineer_macro_interactions(df: pd.DataFrame) -> pd.DataFrame:
     created = []
 
     # Step 2: CPI -> normalized  why this one is normalizesd ? becauase avg cpi is 195.1333 so it can explode in magnitude.
-
 
     if "avg_macro_CPI" in df.columns and "total_delinquency" in df.columns:
         df["cpi_risk_norm"] = (
@@ -291,8 +295,8 @@ def engineer_macro_interactions(df: pd.DataFrame) -> pd.DataFrame:
 
 def standardize_macro_features(
     train_df: pd.DataFrame,
-    val_df:   pd.DataFrame,
-    test_df:  pd.DataFrame,
+    val_df: pd.DataFrame,
+    test_df: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Standardise the macro interaction columns produced by
@@ -304,22 +308,27 @@ def standardize_macro_features(
     If none of the expected columns are present the function is a no-op.
     """
     macro_interaction_cols = [
-        c for c in ["cpi_x_delinquency", "gdp_x_delinquency", "taiex_x_delinquency"]
+        c
+        for c in ["cpi_x_delinquency", "gdp_x_delinquency", "taiex_x_delinquency"]
         if c in train_df.columns
     ]
 
     if not macro_interaction_cols:
-        log.info("standardize_macro_features: no macro interaction columns found — skipped.")
+        log.info(
+            "standardize_macro_features: no macro interaction columns found — skipped."
+        )
         return train_df, val_df, test_df
 
     train_df = train_df.copy()
-    val_df   = val_df.copy()
-    test_df  = test_df.copy()
+    val_df = val_df.copy()
+    test_df = test_df.copy()
 
     scaler = StandardScaler()
-    train_df[macro_interaction_cols] = scaler.fit_transform(train_df[macro_interaction_cols])
-    val_df[macro_interaction_cols]   = scaler.transform(val_df[macro_interaction_cols])
-    test_df[macro_interaction_cols]  = scaler.transform(test_df[macro_interaction_cols])
+    train_df[macro_interaction_cols] = scaler.fit_transform(
+        train_df[macro_interaction_cols]
+    )
+    val_df[macro_interaction_cols] = scaler.transform(val_df[macro_interaction_cols])
+    test_df[macro_interaction_cols] = scaler.transform(test_df[macro_interaction_cols])
 
     log.info(
         "standardize_macro_features: fit on train, applied to all splits: %s.",
@@ -330,8 +339,8 @@ def standardize_macro_features(
 
 def handle_bill_amt_collinearity(
     train_df: pd.DataFrame,
-    val_df:   pd.DataFrame,
-    test_df:  pd.DataFrame,
+    val_df: pd.DataFrame,
+    test_df: pd.DataFrame,
     strategy: str = "pca",
     n_components: int = 2,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -357,14 +366,14 @@ def handle_bill_amt_collinearity(
         return train_df, val_df, test_df
 
     train_df = train_df.copy()
-    val_df   = val_df.copy()
-    test_df  = test_df.copy()
+    val_df = val_df.copy()
+    test_df = test_df.copy()
 
     if strategy == "drop":
         cols_to_drop = [c for c in present if c != "BILL_AMT1"]
         train_df = train_df.drop(columns=cols_to_drop)
-        val_df   = val_df.drop(columns=cols_to_drop)
-        test_df  = test_df.drop(columns=cols_to_drop)
+        val_df = val_df.drop(columns=cols_to_drop)
+        test_df = test_df.drop(columns=cols_to_drop)
         log.info("BILL_AMT collinearity: dropped %s, kept BILL_AMT1.", cols_to_drop)
         return train_df, val_df, test_df
 
@@ -373,36 +382,36 @@ def handle_bill_amt_collinearity(
 
         # FIT on train only — never fit on val or test
         train_components = pca.fit_transform(train_df[present])
-        val_components   = pca.transform(val_df[present])
-        test_components  = pca.transform(test_df[present])
+        val_components = pca.transform(val_df[present])
+        test_components = pca.transform(test_df[present])
 
         explained = pca.explained_variance_ratio_
         log.info(
-            "BILL_AMT PCA: %d components explain %.2f%% of variance. "
-            "Per component: %s",
+            "BILL_AMT PCA: %d components explain %.2f%% of variance. Per component: %s",
             n_components,
             sum(explained) * 100,
-            [f"PC{i+1}={v:.3f}" for i, v in enumerate(explained)],
+            [f"PC{i + 1}={v:.3f}" for i, v in enumerate(explained)],
         )
 
-        component_cols = [f"BILL_AMT_PC{i+1}" for i in range(n_components)]
+        component_cols = [f"BILL_AMT_PC{i + 1}" for i in range(n_components)]
 
         train_df = train_df.drop(columns=present)
-        val_df   = val_df.drop(columns=present)
-        test_df  = test_df.drop(columns=present)
+        val_df = val_df.drop(columns=present)
+        test_df = test_df.drop(columns=present)
 
         train_pca = train_df.copy()
-        val_pca   = val_df.copy()
-        test_pca  = test_df.copy()
+        val_pca = val_df.copy()
+        test_pca = test_df.copy()
 
         for j, col_name in enumerate(component_cols):
             train_pca[col_name] = train_components[:, j]
-            val_pca[col_name]   = val_components[:, j]
-            test_pca[col_name]  = test_components[:, j]
+            val_pca[col_name] = val_components[:, j]
+            test_pca[col_name] = test_components[:, j]
 
         log.info(
             "BILL_AMT collinearity: replaced %d cols with %d PCA components.",
-            len(present), n_components,
+            len(present),
+            n_components,
         )
         return train_pca, val_pca, test_pca
 
@@ -411,8 +420,8 @@ def handle_bill_amt_collinearity(
 
 def flag_anomalies(
     train_df: pd.DataFrame,
-    val_df:   pd.DataFrame,
-    test_df:  pd.DataFrame,
+    val_df: pd.DataFrame,
+    test_df: pd.DataFrame,
     target_col: str = TARGET_COL,
     contamination: float = 0.05,
     random_state: int = 42,
@@ -440,8 +449,8 @@ def flag_anomalies(
     the label cannot influence anomaly scoring (no target leakage).
     """
     train_df = train_df.copy()
-    val_df   = val_df.copy()
-    test_df  = test_df.copy()
+    val_df = val_df.copy()
+    test_df = test_df.copy()
 
     feature_cols = [c for c in train_df.columns if c != target_col]
 
@@ -511,7 +520,9 @@ def handle_data_imbalance(
     resampled_df[y_name] = y_resampled
 
     log.info("Class distribution before SMOTE: %s", y_train.value_counts().to_dict())
-    log.info("Class distribution after  SMOTE: %s", y_resampled.value_counts().to_dict())
+    log.info(
+        "Class distribution after  SMOTE: %s", y_resampled.value_counts().to_dict()
+    )
 
     return resampled_df
 
@@ -523,17 +534,16 @@ def run_transformation(
     train_output: str,
     val_output: str,
     test_output: str,
-    ) -> None:
-
+) -> None:
     """
     transformation pipeline.
 
     Step order
     -------------------------
-    1.  Remap undocumented categorical codes          
-    2.  Engineer credit-utilisation features          
-    3.  Engineer payment-behaviour features           
-    4.  Engineer macro interaction features           
+    1.  Remap undocumented categorical codes
+    2.  Engineer credit-utilisation features
+    3.  Engineer payment-behaviour features
+    4.  Engineer macro interaction features
     5.  Standardise macro interaction features        (fit on train only)
     6.  Handle BILL_AMT collinearity (PCA or drop)   (fit on train only)
     7.  Flag multivariate anomalies (Isolation Forest)(fit on train only)
@@ -546,47 +556,51 @@ def run_transformation(
 
     log.info("Loading cleaned datasets...")
     train_df = pd.read_csv(train_input)
-    val_df   = pd.read_csv(val_input)
-    test_df  = pd.read_csv(test_input)
+    val_df = pd.read_csv(val_input)
+    test_df = pd.read_csv(test_input)
 
     log.info("--- Step 1: Remap undocumented categorical codes ---")
     train_df = remap_categorical_codes(train_df)
-    val_df   = remap_categorical_codes(val_df)
-    test_df  = remap_categorical_codes(test_df)
+    val_df = remap_categorical_codes(val_df)
+    test_df = remap_categorical_codes(test_df)
 
     log.info("--- Step 2: Recode PAY_STATUS columns to ordinal scale ---")
     train_df = recode_pay_status(train_df)
-    val_df   = recode_pay_status(val_df)
-    test_df  = recode_pay_status(test_df)
+    val_df = recode_pay_status(val_df)
+    test_df = recode_pay_status(test_df)
 
     log.info("--- Step 3: Engineer credit-utilisation features ---")
     train_df = engineer_credit_features(train_df)
-    val_df   = engineer_credit_features(val_df)
-    test_df  = engineer_credit_features(test_df)
+    val_df = engineer_credit_features(val_df)
+    test_df = engineer_credit_features(test_df)
 
     log.info("--- Step 4: Engineer payment-behaviour features ---")
     train_df = engineer_payment_features(train_df)
-    val_df   = engineer_payment_features(val_df)
-    test_df  = engineer_payment_features(test_df)
+    val_df = engineer_payment_features(val_df)
+    test_df = engineer_payment_features(test_df)
 
     log.info("--- Step 5: Engineer macro interaction features ---")
     train_df = engineer_macro_interactions(train_df)
-    val_df   = engineer_macro_interactions(val_df)
-    test_df  = engineer_macro_interactions(test_df)
+    val_df = engineer_macro_interactions(val_df)
+    test_df = engineer_macro_interactions(test_df)
 
     log.info("--- Step 6: Standardise macro interaction features ---")
     train_df, val_df, test_df = standardize_macro_features(train_df, val_df, test_df)
 
     log.info("--- Step 7: Handle BILL_AMT collinearity (%s) ---", "pca")
     train_df, val_df, test_df = handle_bill_amt_collinearity(
-        train_df, val_df, test_df,
+        train_df,
+        val_df,
+        test_df,
         strategy="pca",
         n_components=2,
     )
 
     log.info("--- Step 8: Flag multivariate anomalies (Isolation Forest) ---")
     train_df, val_df, test_df = flag_anomalies(
-        train_df, val_df, test_df,
+        train_df,
+        val_df,
+        test_df,
         contamination=0.05,
     )
 
@@ -604,6 +618,7 @@ def run_transformation(
     train_df.to_csv(train_output, index=False)
     log.info("Saved train -> %s", train_output)
 
+
 if __name__ == "__main__":
     run_transformation(
         train_input="data/clean/train_cleaned.csv",
@@ -612,18 +627,22 @@ if __name__ == "__main__":
         train_output="data/transformed/train_transformed.csv",
         val_output="data/transformed/val_transformed.csv",
         test_output="data/transformed/test_transformed.csv",
-
     )
 
 if __name__ != "__main__":
     try:
-        if Path("data/clean/test_cleaned.csv").exists() and Path("data/clean/train_cleaned.csv").exists() and Path("data/clean/val_cleaned.csv").exists():
-            run_transformation( train_input="data/clean/train_cleaned.csv",
-                    val_input="data/clean/val_cleaned.csv",
-                    test_input="data/clean/test_cleaned.csv",
-                    train_output="data/transformed/train_transformed.csv",
-                    val_output="data/transformed/val_transformed.csv",
-                    test_output="data/transformed/test_transformed.csv",
+        if (
+            Path("data/clean/test_cleaned.csv").exists()
+            and Path("data/clean/train_cleaned.csv").exists()
+            and Path("data/clean/val_cleaned.csv").exists()
+        ):
+            run_transformation(
+                train_input="data/clean/train_cleaned.csv",
+                val_input="data/clean/val_cleaned.csv",
+                test_input="data/clean/test_cleaned.csv",
+                train_output="data/transformed/train_transformed.csv",
+                val_output="data/transformed/val_transformed.csv",
+                test_output="data/transformed/test_transformed.csv",
             )
     except Exception as e:
         log.warning(f"Auto-transformation failed during import: {e}")

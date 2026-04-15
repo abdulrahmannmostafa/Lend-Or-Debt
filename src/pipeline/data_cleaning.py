@@ -16,17 +16,18 @@ TARGET_COL = "default payment next month"
 PAY_STATUS_COLS = ["PAY_0", "PAY_2", "PAY_3", "PAY_4", "PAY_5", "PAY_6"]
 
 BILL_AMT_COLS = [f"BILL_AMT{i}" for i in range(1, 7)]
-PAY_AMT_COLS  = [f"PAY_AMT{i}" for i in range(1, 7)]
+PAY_AMT_COLS = [f"PAY_AMT{i}" for i in range(1, 7)]
 
 # Columns with positive skew confirmed by KS-test failures in Phase 1 report
 LOG1P_COLS = PAY_AMT_COLS + BILL_AMT_COLS + ["avg_bill", "avg_payment"]
 
 POWER_TRANSFORM_COLS = ["LIMIT_BAL", "AGE"]
 
+
 def handle_outliers(
     train_df: pd.DataFrame,
-    val_df:   pd.DataFrame,
-    test_df:  pd.DataFrame,
+    val_df: pd.DataFrame,
+    test_df: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Two-stage outlier treatment for financial amount columns.
@@ -40,13 +41,15 @@ def handle_outliers(
         log1p is safe for zero-heavy financial data (log(1+0)=0).
     """
     train_df = train_df.copy()
-    val_df   = val_df.copy()
-    test_df  = test_df.copy()
+    val_df = val_df.copy()
+    test_df = test_df.copy()
 
     # --- Stage A: compute caps from train, apply to all splits ---
-    log.info("Outliers Stage A: computing PAY/BILL ratio caps from TRAIN split only ...")
+    log.info(
+        "Outliers Stage A: computing PAY/BILL ratio caps from TRAIN split only ..."
+    )
     for i in range(1, 7):
-        pay_col  = f"PAY_AMT{i}"
+        pay_col = f"PAY_AMT{i}"
         bill_col = f"BILL_AMT{i}"
         if pay_col not in train_df.columns or bill_col not in train_df.columns:
             continue
@@ -69,11 +72,17 @@ def handle_outliers(
                 continue
             ratio = df_part.loc[pos_mask, pay_col] / df_part.loc[pos_mask, bill_col]
             n_capped = int((ratio > cap).sum())
-            df_part.loc[pos_mask, pay_col] = np.minimum(ratio, cap) * df_part.loc[pos_mask, bill_col]
+            df_part.loc[pos_mask, pay_col] = (
+                np.minimum(ratio, cap) * df_part.loc[pos_mask, bill_col]
+            )
             if n_capped:
                 log.info(
                     "  %s/%s [%s]: 99th-pct cap (train) = %.4f | rows capped = %d",
-                    pay_col, bill_col, label, cap, n_capped,
+                    pay_col,
+                    bill_col,
+                    label,
+                    cap,
+                    n_capped,
                 )
 
     # Recompute avg_payment after capping so engineered features stay consistent
@@ -91,9 +100,11 @@ def handle_outliers(
                 continue
             min_val = df_part[col].min()
             if min_val < 0:
-                # Shift so minimum = 0 before log; 
+                # Shift so minimum = 0 before log;
                 df_part[col] = df_part[col] - min_val
-                log.info("  %s [%s]: shifted by %.2f before log1p.", col, label, min_val)
+                log.info(
+                    "  %s [%s]: shifted by %.2f before log1p.", col, label, min_val
+                )
             df_part[col] = np.log1p(df_part[col])
 
     log.info("log1p applied to amount columns in all splits.")
@@ -102,8 +113,8 @@ def handle_outliers(
 
 def handle_distribution(
     train_df: pd.DataFrame,
-    val_df:   pd.DataFrame,
-    test_df:  pd.DataFrame,
+    val_df: pd.DataFrame,
+    test_df: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Apply Yeo-Johnson PowerTransformer to LIMIT_BAL and AGE.
@@ -118,8 +129,8 @@ def handle_distribution(
         return train_df, val_df, test_df
 
     train_df = train_df.copy()
-    val_df   = val_df.copy()
-    test_df  = test_df.copy()
+    val_df = val_df.copy()
+    test_df = test_df.copy()
 
     transformer = PowerTransformer(method="yeo-johnson", standardize=True)
 
@@ -128,15 +139,14 @@ def handle_distribution(
 
     # APPLY to all splits
     train_df[present] = transformer.transform(train_df[present])
-    val_df[present]   = transformer.transform(val_df[present])
-    test_df[present]  = transformer.transform(test_df[present])
+    val_df[present] = transformer.transform(val_df[present])
+    test_df[present] = transformer.transform(test_df[present])
 
     log.info(
         "Distribution: Yeo-Johnson PowerTransformer fit on train, applied to all splits: %s.",
         present,
     )
     return train_df, val_df, test_df
-
 
 
 def handle_uniqueness(df: pd.DataFrame) -> pd.DataFrame:
@@ -152,7 +162,9 @@ def handle_uniqueness(df: pd.DataFrame) -> pd.DataFrame:
 
     if duplicates_removed > 0:
         pct = (duplicates_removed / before_count) * 100
-        log.info(f"Removed {duplicates_removed} duplicate records ({pct:.2f}% of dataset)")
+        log.info(
+            f"Removed {duplicates_removed} duplicate records ({pct:.2f}% of dataset)"
+        )
     else:
         log.info("No duplicate records found.")
 
@@ -163,7 +175,7 @@ def split_dataset(
     df: pd.DataFrame,
     target_col: str = TARGET_COL,
     train_frac: float = 0.70,
-    val_frac:   float = 0.15,
+    val_frac: float = 0.15,
     random_state: int = 42,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
@@ -184,7 +196,8 @@ def split_dataset(
 
     # First split: train+val vs test
     X_tv, X_test, y_tv, y_test = train_test_split(
-        X, y,
+        X,
+        y,
         test_size=test_frac,
         stratify=y,
         random_state=random_state,
@@ -193,7 +206,8 @@ def split_dataset(
     # Second split: train vs val (relative proportion within train+val)
     relative_val = val_frac / (train_frac + val_frac)
     X_train, X_val, y_train, y_val = train_test_split(
-        X_tv, y_tv,
+        X_tv,
+        y_tv,
         test_size=relative_val,
         stratify=y_tv,
         random_state=random_state,
@@ -205,14 +219,17 @@ def split_dataset(
         return out
 
     train_df = _recombine(X_train, y_train)
-    val_df   = _recombine(X_val,   y_val)
-    test_df  = _recombine(X_test,  y_test)
+    val_df = _recombine(X_val, y_val)
+    test_df = _recombine(X_test, y_test)
 
     log.info(
         "Split: train=%d (%.0f%%) | val=%d (%.0f%%) | test=%d (%.0f%%)",
-        len(train_df), train_frac * 100,
-        len(val_df),   val_frac   * 100,
-        len(test_df),  test_frac  * 100,
+        len(train_df),
+        train_frac * 100,
+        len(val_df),
+        val_frac * 100,
+        len(test_df),
+        test_frac * 100,
     )
     for name, part in [("train", train_df), ("val", val_df), ("test", test_df)]:
         rate = part[target_col].mean()
@@ -258,8 +275,8 @@ def clean_data(
     log.info("Saved val   -> %s", val_output)
     log.info("Saved test  -> %s", test_output)
 
-if __name__ == "__main__":
 
+if __name__ == "__main__":
     clean_data(
         input_path="data/taiwan_merged.csv",
         train_output="data/clean/train_cleaned.csv",
@@ -269,9 +286,11 @@ if __name__ == "__main__":
 if __name__ != "__main__":
     try:
         if Path("data/taiwan_merged.csv").exists():
-            clean_data(        input_path="data/taiwan_merged.csv",
-        train_output="data/clean/train_cleaned.csv",
-        val_output="data/clean/val_cleaned.csv",
-        test_output="data/clean/test_cleaned.csv",)
+            clean_data(
+                input_path="data/taiwan_merged.csv",
+                train_output="data/clean/train_cleaned.csv",
+                val_output="data/clean/val_cleaned.csv",
+                test_output="data/clean/test_cleaned.csv",
+            )
     except Exception as _e:
         log.warning("Auto-run during import failed: %s", _e)

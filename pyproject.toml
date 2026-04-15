@@ -6,6 +6,9 @@ authors = ["abdulrahmannmostafa <abdelrahman.abdeltawab03@eng-st.cu.edu.eg>"]
 readme = "README.md"
 package-mode = false
 
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.15.10"
+
 [tool.mypy]
 explicit_package_bases = true
 ignore_missing_imports = true
