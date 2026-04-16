@@ -23,6 +23,15 @@ LOG1P_COLS = PAY_AMT_COLS + BILL_AMT_COLS + ["avg_bill", "avg_payment"]
 
 POWER_TRANSFORM_COLS = ["LIMIT_BAL", "AGE"]
 
+def type_coercion(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    change type of LOG1P_COLS to float.
+
+    """
+    for col in LOG1P_COLS:
+        if col in df.columns:
+            df[col] = df[col].astype(float)
+    return df
 
 def handle_outliers(
     train_df: pd.DataFrame,
@@ -51,6 +60,7 @@ def handle_outliers(
     for i in range(1, 7):
         pay_col = f"PAY_AMT{i}"
         bill_col = f"BILL_AMT{i}"
+        
         if pay_col not in train_df.columns or bill_col not in train_df.columns:
             continue
 
@@ -255,13 +265,15 @@ def clean_data(
 
     log.info("Starting data cleaning pipeline...")
     df = pd.read_csv(input_path)
-    log.info("--- Step 1: Handle uniqueness (remove duplicates) ---")
+    log.info("--- Step 1: Handle Type Coercion ---")
+    df = type_coercion(df)
+    log.info("--- Step 2: Handle uniqueness (remove duplicates) ---")
     df = handle_uniqueness(df)
-    log.info("--- Step 2: Train/Val/Test split (70/15/15, stratified) ---")
+    log.info("--- Step 3: Train/Val/Test split (70/15/15, stratified) ---")
     train_df, val_df, test_df = split_dataset(df)
-    log.info("--- Step 3: Handle outliers (capping + log1p) ---")
+    log.info("--- Step 4: Handle outliers (capping + log1p) ---")
     train_df, val_df, test_df = handle_outliers(train_df, val_df, test_df)
-    log.info("--- Step 4: Handle distribution (Yeo-Johnson power transform) ---")
+    log.info("--- Step 5: Handle distribution (Yeo-Johnson power transform) ---")
     train_df, val_df, test_df = handle_distribution(train_df, val_df, test_df)
 
     # save outputs

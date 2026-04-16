@@ -67,7 +67,6 @@ _PHASES: list[dict] = [
             "test_output": "data/transformed/test_transformed.csv",
         },
     },
-    # Phase 4 — Data Transformation        (add when ready)
     # Phase 5 — Model Training             (add when ready)
     # Phase 6 — Model Evaluation           (add when ready)
 ]
