@@ -309,7 +309,13 @@ def standardize_macro_features(
     """
     macro_interaction_cols = [
         c
-        for c in ["cpi_risk_norm","gdp_x_payment_ratio", "taiex_x_utilisation", "rate_x_delinquency", "unemp_x_delinquency"]
+        for c in [
+            "cpi_risk_norm",
+            "gdp_x_payment_ratio",
+            "taiex_x_utilisation",
+            "rate_x_delinquency",
+            "unemp_x_delinquency",
+        ]
         if c in train_df.columns
     ]
 

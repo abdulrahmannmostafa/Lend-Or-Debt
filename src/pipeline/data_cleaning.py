@@ -23,6 +23,7 @@ LOG1P_COLS = PAY_AMT_COLS + BILL_AMT_COLS + ["avg_bill", "avg_payment"]
 
 POWER_TRANSFORM_COLS = ["LIMIT_BAL", "AGE"]
 
+
 def type_coercion(df: pd.DataFrame) -> pd.DataFrame:
     """
     change type of LOG1P_COLS to float.
@@ -32,6 +33,7 @@ def type_coercion(df: pd.DataFrame) -> pd.DataFrame:
         if col in df.columns:
             df[col] = df[col].astype(float)
     return df
+
 
 def handle_outliers(
     train_df: pd.DataFrame,
@@ -60,7 +62,7 @@ def handle_outliers(
     for i in range(1, 7):
         pay_col = f"PAY_AMT{i}"
         bill_col = f"BILL_AMT{i}"
-        
+
         if pay_col not in train_df.columns or bill_col not in train_df.columns:
             continue
 
