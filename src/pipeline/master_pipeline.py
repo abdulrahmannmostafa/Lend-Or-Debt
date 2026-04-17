@@ -44,7 +44,7 @@ _PHASES: list[dict] = [
             "md_output": "data/validation_report.md",
         },
     },
-    # Phase 3 — Data Cleaning              
+    # Phase 3 — Data Cleaning
     {
         "name": "3 | Data Cleaning",
         "fn": clean_data,
@@ -55,7 +55,7 @@ _PHASES: list[dict] = [
             "test_output": "data/clean/test_cleaned.csv",
         },
     },
-    # Phase 4 — Data Transformation         
+    # Phase 4 — Data Transformation
     {
         "name": "4 | Data Transformation",
         "fn": run_transformation,
