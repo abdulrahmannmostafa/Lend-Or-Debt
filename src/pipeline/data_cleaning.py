@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import logging
 from pathlib import Path
-from sklearn.preprocessing import PowerTransformer
 from sklearn.model_selection import train_test_split
 
 logging.basicConfig(
@@ -12,8 +11,6 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 TARGET_COL = "default payment next month"
-
-PAY_STATUS_COLS = ["PAY_0", "PAY_2", "PAY_3", "PAY_4", "PAY_5", "PAY_6"]
 
 BILL_AMT_COLS = [f"BILL_AMT{i}" for i in range(1, 7)]
 PAY_AMT_COLS = [f"PAY_AMT{i}" for i in range(1, 7)]
@@ -29,6 +26,7 @@ def type_coercion(df: pd.DataFrame) -> pd.DataFrame:
     change type of LOG1P_COLS to float.
 
     """
+    df.rename(columns={"PAY_0": "PAY_1"}, inplace=True)
     for col in LOG1P_COLS:
         if col in df.columns:
             df[col] = df[col].astype(float)
@@ -43,22 +41,17 @@ def handle_outliers(
     """
     Two-stage outlier treatment for financial amount columns.
 
-    Stage A — Capping (fit on train only):
+         Capping (fit on train only):
         For each PAY_AMTi/BILL_AMTi pair, compute the 99th-percentile cap
         from the TRAINING split only, then apply that same cap to val/test.
 
-    Stage B — Transformation (fixed function, no fitting):
-        Apply log1p to all PAY_AMT, BILL_AMT, avg_bill, avg_payment columns.
-        log1p is safe for zero-heavy financial data (log(1+0)=0).
     """
     train_df = train_df.copy()
     val_df = val_df.copy()
     test_df = test_df.copy()
 
-    # --- Stage A: compute caps from train, apply to all splits ---
-    log.info(
-        "Outliers Stage A: computing PAY/BILL ratio caps from TRAIN split only ..."
-    )
+    # ---  compute caps from train, apply to all splits ---
+    log.info("Outliers  computing PAY/BILL ratio caps from TRAIN split only ...")
     for i in range(1, 7):
         pay_col = f"PAY_AMT{i}"
         bill_col = f"BILL_AMT{i}"
@@ -101,63 +94,9 @@ def handle_outliers(
     pay_present = [c for c in PAY_AMT_COLS if c in train_df.columns]
     for df_part, label in [(train_df, "train"), (val_df, "val"), (test_df, "test")]:
         if pay_present and "avg_payment" in df_part.columns:
-            df_part["avg_payment"] = df_part[pay_present].mean(axis=1)
+            df_part["avg_payment"] = df_part[pay_present].mean(axis=1).fillna(0.0)
     log.info("avg_payment recomputed in all splits after capping.")
 
-    # --- Stage B: log1p transform (fixed function — no fitting needed) ---
-    log.info("Outliers Stage B: applying log1p transform to amount columns ...")
-    for df_part, label in [(train_df, "train"), (val_df, "val"), (test_df, "test")]:
-        for col in LOG1P_COLS:
-            if col not in df_part.columns:
-                continue
-            min_val = df_part[col].min()
-            if min_val < 0:
-                # Shift so minimum = 0 before log;
-                df_part[col] = df_part[col] - min_val
-                log.info(
-                    "  %s [%s]: shifted by %.2f before log1p.", col, label, min_val
-                )
-            df_part[col] = np.log1p(df_part[col])
-
-    log.info("log1p applied to amount columns in all splits.")
-    return train_df, val_df, test_df
-
-
-def handle_distribution(
-    train_df: pd.DataFrame,
-    val_df: pd.DataFrame,
-    test_df: pd.DataFrame,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """
-    Apply Yeo-Johnson PowerTransformer to LIMIT_BAL and AGE.
-
-    The transformer is fit ONLY on the training split to learn the lambda
-    parameters, then the same fitted transformer is used to transform
-    val and test — preventing any leakage of test statistics.
-    """
-    present = [c for c in POWER_TRANSFORM_COLS if c in train_df.columns]
-    if not present:
-        log.info("Distribution: no power-transform columns found — skipping.")
-        return train_df, val_df, test_df
-
-    train_df = train_df.copy()
-    val_df = val_df.copy()
-    test_df = test_df.copy()
-
-    transformer = PowerTransformer(method="yeo-johnson", standardize=True)
-
-    # FIT on train only
-    transformer.fit(train_df[present])
-
-    # APPLY to all splits
-    train_df[present] = transformer.transform(train_df[present])
-    val_df[present] = transformer.transform(val_df[present])
-    test_df[present] = transformer.transform(test_df[present])
-
-    log.info(
-        "Distribution: Yeo-Johnson PowerTransformer fit on train, applied to all splits: %s.",
-        present,
-    )
     return train_df, val_df, test_df
 
 
@@ -273,10 +212,8 @@ def clean_data(
     df = handle_uniqueness(df)
     log.info("--- Step 3: Train/Val/Test split (70/15/15, stratified) ---")
     train_df, val_df, test_df = split_dataset(df)
-    log.info("--- Step 4: Handle outliers (capping + log1p) ---")
+    log.info("--- Step 4: Handle outliers (capping ) ---")
     train_df, val_df, test_df = handle_outliers(train_df, val_df, test_df)
-    log.info("--- Step 5: Handle distribution (Yeo-Johnson power transform) ---")
-    train_df, val_df, test_df = handle_distribution(train_df, val_df, test_df)
 
     # save outputs
     Path(train_output).parent.mkdir(parents=True, exist_ok=True)
