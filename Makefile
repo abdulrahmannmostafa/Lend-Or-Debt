@@ -41,6 +41,16 @@ validation:
 	poetry run python -m src.pipeline.data_validation
 	@echo ">>> Data validation is completed"
 
+cleaning:
+	@echo ">>> Running data cleaning script..."
+	poetry run python -m src.pipeline.data_cleaning
+	@echo ">>> Data cleaning is completed"
+
+transformation:
+	@echo ">>> Running data transformation script..."
+	poetry run python -m src.pipeline.data_transformation
+	@echo ">>> Data transformation is completed"
+
 pipeline:
 	@echo ">>> Full pipeline of all phases"
 	poetry run python -m src.pipeline.master_pipeline
