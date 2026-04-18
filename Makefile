@@ -40,6 +40,10 @@ validation:
 	@echo ">>> Running data validation script..."
 	poetry run python -m src.pipeline.data_validation
 	@echo ">>> Data validation is completed"
+eda:
+	@echo ">>> Running data validation script..."
+	poetry run python -m src.pipeline.eda
+	@echo ">>> Data validation is completed"
 
 cleaning:
 	@echo ">>> Running data cleaning script..."
