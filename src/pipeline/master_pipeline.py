@@ -6,7 +6,7 @@ import time
 
 from src.pipeline.data_acquisition import run_acquisition  # Phase 1
 from src.pipeline.data_validation import run_validation  # Phase 2
-
+from src.pipeline.eda import run_eda
 from src.pipeline.data_cleaning import clean_data  # Phase 3  <- uncomment when ready
 from src.pipeline.data_transformation import (
     run_transformation,
@@ -67,6 +67,12 @@ _PHASES: list[dict] = [
             "test_output": "data/transformed/test_transformed.csv",
         },
     },
+    # Phase 5 — EDA
+    {
+        "name": "5 | EDA",
+        "fn": run_eda,
+        "kwargs": {},
+    },  
     # Phase 5 — Model Training             (add when ready)
     # Phase 6 — Model Evaluation           (add when ready)
 ]
