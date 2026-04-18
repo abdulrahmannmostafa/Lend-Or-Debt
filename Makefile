@@ -40,7 +40,10 @@ validation:
 	@echo ">>> Running data validation script..."
 	poetry run python -m src.pipeline.data_validation
 	@echo ">>> Data validation is completed"
-
+eda:
+	@echo ">>> Running data validation script..."
+	poetry run python -m src.pipeline.eda
+	@echo ">>> Data validation is completed"
 pipeline:
 	@echo ">>> Full pipeline of all phases"
 	poetry run python -m src.pipeline.master_pipeline
