@@ -1,19 +1,24 @@
 import pandas as pd
 import logging
+import numpy as np
 from pathlib import Path
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.ensemble import IsolationForest
 from imblearn.over_sampling import SMOTE
-
+from sklearn.preprocessing import PowerTransformer
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 
 BILL_AMT_COLS = [f"BILL_AMT{i}" for i in range(1, 7)]
-PAY_STATUS_COLS = ["PAY_0", "PAY_2", "PAY_3", "PAY_4", "PAY_5", "PAY_6"]
+PAY_STATUS_COLS = ["PAY_1", "PAY_2", "PAY_3", "PAY_4", "PAY_5", "PAY_6"]
 TARGET_COL = "default payment next month"
+POWER_TRANSFORM_COLS = ["LIMIT_BAL", "AGE"]
+PAY_AMT_COLS = [f"PAY_AMT{i}" for i in range(1, 7)]
+
+LOG1P_COLS = PAY_AMT_COLS + BILL_AMT_COLS + ["avg_bill", "avg_payment"]
 
 
 def remap_categorical_codes(df: pd.DataFrame) -> pd.DataFrame:
@@ -185,7 +190,8 @@ def engineer_payment_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
     if "avg_payment" in df.columns and "avg_bill" in df.columns:
-        df["payment_ratio"] = df["avg_payment"] / (df["avg_bill"] + 1)
+        denominator = df["avg_bill"].replace(0, 1)
+        df["payment_ratio"] = df["avg_payment"] / denominator
         df["avg_unpaid_balance"] = df["avg_bill"] - df["avg_payment"]
         df["is_underpaying"] = (df["avg_payment"] < df["avg_bill"]).astype(int)
         log.info(
@@ -533,6 +539,65 @@ def handle_data_imbalance(
     return resampled_df
 
 
+def handle_distribution(
+    train_df: pd.DataFrame,
+    val_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """
+    Apply Yeo-Johnson PowerTransformer to LIMIT_BAL and AGE.
+
+    The transformer is fit ONLY on the training split to learn the lambda
+    parameters, then the same fitted transformer is used to transform
+    val and test — preventing any leakage of test statistics.
+
+    Transformation (fixed function, no fitting):
+        Apply log1p to all PAY_AMT, BILL_AMT, avg_bill, avg_payment columns.
+        log1p is safe for zero-heavy financial data (log(1+0)=0).
+    """
+    present = [c for c in POWER_TRANSFORM_COLS if c in train_df.columns]
+    if not present:
+        log.info("Distribution: no power-transform columns found — skipping.")
+        return train_df, val_df, test_df
+
+    train_df = train_df.copy()
+    val_df = val_df.copy()
+    test_df = test_df.copy()
+
+    transformer = PowerTransformer(method="yeo-johnson", standardize=True)
+
+    # FIT on train only
+    transformer.fit(train_df[present])
+
+    # APPLY to all splits
+    train_df[present] = transformer.transform(train_df[present])
+    val_df[present] = transformer.transform(val_df[present])
+    test_df[present] = transformer.transform(test_df[present])
+
+    log.info(
+        "Distribution: Yeo-Johnson PowerTransformer fit on train, applied to all splits: %s.",
+        present,
+    )
+
+    # --- log1p transform (fixed function — no fitting needed) ---
+    log.info("Outliers applying log1p transform to amount columns ...")
+    for df_part, label in [(train_df, "train"), (val_df, "val"), (test_df, "test")]:
+        for col in LOG1P_COLS:
+            if col not in df_part.columns:
+                continue
+            min_val = df_part[col].min()
+            if min_val < 0:
+                # Shift so minimum = 0 before log;
+                df_part[col] = df_part[col] - min_val
+                log.info(
+                    "  %s [%s]: shifted by %.2f before log1p.", col, label, min_val
+                )
+            df_part[col] = np.log1p(df_part[col])
+
+    log.info("log1p applied to amount columns in all splits.")
+    return train_df, val_df, test_df
+
+
 def run_transformation(
     train_input: str,
     val_input: str,
@@ -551,9 +616,10 @@ def run_transformation(
     3.  Engineer payment-behaviour features
     4.  Engineer macro interaction features
     5.  Standardise macro interaction features        (fit on train only)
-    6.  Handle BILL_AMT collinearity (PCA or drop)   (fit on train only)
-    7.  Flag multivariate anomalies (Isolation Forest)(fit on train only)
-    8.  SMOTE oversampling                            (train only, LAST step)
+    6. Handle skewed distributions with PowerTransformer  and log1p   (fit on train only)
+    7.  Handle BILL_AMT collinearity (PCA or drop)   (fit on train only)
+    8.  Flag multivariate anomalies (Isolation Forest)(fit on train only)
+    9.  SMOTE oversampling                            (train only, LAST step)
 
     Val and test sets are NEVER used to fit any transformer.
     SMOTE is applied last so synthetic samples do not contaminate
@@ -584,16 +650,27 @@ def run_transformation(
     train_df = engineer_payment_features(train_df)
     val_df = engineer_payment_features(val_df)
     test_df = engineer_payment_features(test_df)
-
+    mask = train_df["payment_ratio"].isna()
+    log.info(
+        "Problematic rows:\n%s",
+        train_df[mask][["avg_payment", "avg_bill", "payment_ratio"]].to_string(),
+    )
+    log.info("avg_payment dtype: %s", train_df["avg_payment"].dtype)
+    log.info("avg_bill dtype: %s", train_df["avg_bill"].dtype)
     log.info("--- Step 5: Engineer macro interaction features ---")
     train_df = engineer_macro_interactions(train_df)
     val_df = engineer_macro_interactions(val_df)
     test_df = engineer_macro_interactions(test_df)
 
-    log.info("--- Step 6: Standardise macro interaction features ---")
+    log.info(
+        "--- Step 6: Handle skewed distributions with PowerTransformer and log1p ---"
+    )
+    train_df, val_df, test_df = handle_distribution(train_df, val_df, test_df)
+
+    log.info("--- Step 7: Standardise macro interaction features ---")
     train_df, val_df, test_df = standardize_macro_features(train_df, val_df, test_df)
 
-    log.info("--- Step 7: Handle BILL_AMT collinearity (%s) ---", "pca")
+    log.info("--- Step 8: Handle BILL_AMT collinearity (%s) ---", "pca")
     train_df, val_df, test_df = handle_bill_amt_collinearity(
         train_df,
         val_df,
@@ -602,14 +679,28 @@ def run_transformation(
         n_components=2,
     )
 
-    log.info("--- Step 8: Flag multivariate anomalies (Isolation Forest) ---")
+    log.info("--- Step 9: Flag multivariate anomalies (Isolation Forest) ---")
     train_df, val_df, test_df = flag_anomalies(
         train_df,
         val_df,
         test_df,
         contamination=0.05,
     )
-
+    for split, df_part in [("train", train_df), ("val", val_df), ("test", test_df)]:
+        nan_pay = df_part["avg_payment"].isna().sum()
+        nan_bill = df_part["avg_bill"].isna().sum()
+        nan_ratio = (
+            df_part["payment_ratio"].isna().sum()
+            if "payment_ratio" in df_part.columns
+            else "col missing"
+        )
+        log.info(
+            "[%s] avg_payment NaN=%s | avg_bill NaN=%s | payment_ratio NaN=%s",
+            split,
+            nan_pay,
+            nan_bill,
+            nan_ratio,
+        )
     Path(val_output).parent.mkdir(parents=True, exist_ok=True)
     Path(test_output).parent.mkdir(parents=True, exist_ok=True)
     val_df.to_csv(val_output, index=False)
