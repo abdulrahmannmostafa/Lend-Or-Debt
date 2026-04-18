@@ -63,6 +63,8 @@ This will execute:
 
 - Data acquisition
 - Data Validation
+- Data Cleaning
+- Data Transformation
 - Full pipeline
 
 ---
@@ -81,6 +83,18 @@ make acquisition
 make validation
 ```
 
+### Data Cleaning
+
+```bash
+make cleaning
+```
+
+### Data Transformation
+
+```bash
+make transformation
+```
+
 ---
 
 ## Project Structure
@@ -90,11 +104,15 @@ src/
  └── pipeline/
       ├── data_acquisition.py
       ├── data_validation.py
+      ├── data_cleaning.py
+      ├── data_transformation.py
       └── master_pipeline.py
 ```
 
 - `data_acquisition.py` - Fetches and prepares raw data
 - `data_validation.py` - Runs validation checks
+- `data_cleaning.py` - Cleans the validated data and handles missing or inconsistent values
+- `data_transformation.py` - Transforms the cleaned data into model-ready or analysis-ready features
 - `master_pipeline.py` - Orchestrates the full workflow
 
 ---
