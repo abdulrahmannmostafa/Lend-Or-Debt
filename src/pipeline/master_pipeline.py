@@ -71,8 +71,15 @@ _PHASES: list[dict] = [
     {
         "name": "5 | EDA",
         "fn": run_eda,
-        "kwargs": {},
-    },  
+        "kwargs": {
+            "train_input_cleaned": "data/clean/train_cleaned.csv",
+            "val_input_cleaned": "data/clean/val_cleaned.csv",
+            "test_input_cleaned": "data/clean/test_cleaned.csv",
+            "train_input_transformed": "data/transformed/train_transformed.csv",
+            "val_input_transformed": "data/transformed/val_transformed.csv",
+            "test_input_transformed": "data/transformed/test_transformed.csv",
+        },
+    },
     # Phase 5 — Model Training             (add when ready)
     # Phase 6 — Model Evaluation           (add when ready)
 ]
