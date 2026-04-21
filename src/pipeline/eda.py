@@ -2,8 +2,10 @@ import logging
 import pandas as pd  # Data manipulation and analysis
 import numpy as np  # Numerical computing
 import matplotlib.pyplot as plt  # Core plotting (the matplotlib.pyplot module)
+from scipy import stats
 import seaborn as sns  # Statistical visualizations (built on matplotlib)
 from pathlib import Path
+from scipy.stats import pearsonr, linregress
 
 plt.style.use("dark_background")
 
@@ -33,6 +35,22 @@ class EDA:
         self.train_input_transformed = train_input_transformed
         self.val_input_transformed = val_input_transformed
         self.test_input_transformed = test_input_transformed
+        self.discrete_features = [
+            "default payment next month",
+            "SEX",
+            "EDUCATION",
+            "MARRIAGE",
+            "is_anomaly",
+            "is_underpaying",
+        ]
+        self.mapping = {
+            "default payment next month": ["No Default", "Default"],
+            "SEX": ["Male", "Female"],
+            "MARRIAGE": ["married", "single", "other"],
+            "EDUCATION": ["graduate", "university", "high school", "other"],
+            "is_anomaly": ["Normal", "Anomaly"],
+            "is_underpaying": ["not_underpaying", "is_underpaying"],
+        }
 
     def load_data_transformed(self):
         log.info("This loader for transformed data eda")
@@ -170,6 +188,231 @@ class EDA:
 
         plt.title(f"Distribution of {feature}", fontsize=14, fontweight="bold")
         plt.tight_layout()
+        plt.show()
+
+    #######################################################################
+    def continues_versus_continuous_eda(self, continuous_features):
+
+        n = len(continuous_features)
+
+        for i, row_feat in enumerate(continuous_features):
+            fig, axes = plt.subplots(1, n, figsize=(n * 5, 5))
+
+            if n == 1:
+                axes = [axes]
+
+            fig.suptitle(
+                f"Analysis: {row_feat} vs Others",
+                fontsize=16,
+                fontweight="bold",
+                y=1.05,
+            )
+
+            for j, col_feat in enumerate(continuous_features):
+                ax = axes[j]
+
+                if row_feat == col_feat:
+                    sns.histplot(
+                        self.full_df_transformed[
+                            row_feat
+                        ].dropna(),  # to help me see the feature distribution
+                        kde=True,
+                        ax=ax,
+                        color="#3834EC",
+                        alpha=0.6,
+                    )
+                    ax.set_title(f"Distribution of {row_feat}", color="#3FEB0B")
+
+                else:
+                    mask = (
+                        ~self.full_df_transformed[row_feat].isna()
+                        & ~self.full_df_transformed[col_feat].isna()
+                    )
+                    x_data = self.full_df_transformed[col_feat][mask]
+                    y_data = self.full_df_transformed[row_feat][mask]
+
+                    if len(x_data) > 0:
+                        ax.scatter(x_data, y_data, alpha=0.3, color="#E02EBA", s=15)
+
+                        m, b, r, p, _ = stats.linregress(x_data, y_data)
+                        x_line = np.linspace(x_data.min(), x_data.max(), 100)
+                        ax.plot(
+                            x_line,
+                            m * x_line + b,
+                            color="#3FEB0B",
+                            lw=2,
+                            label=f"r={r:.2f}",
+                        )
+                        ax.legend(loc="upper right")
+
+                ax.set_xlabel(col_feat)
+                ax.set_ylabel(row_feat)
+                ax.grid(True, linestyle="--", alpha=0.3)
+
+            plt.tight_layout()
+            plt.show()
+
+    def continuous_versus_discrete_eda(self, feature):
+        n = len(self.discrete_features)
+        fig, axes = plt.subplots(n, 3, figsize=(15, 6 * n))
+
+        if n == 1:
+            axes = np.expand_dims(axes, axis=0)
+
+        colors = ["#BC12CC", "#3FEB0B", "#3B27F0", "#74B9FF", "#00B894"]
+
+        for i, disc_feat in enumerate(self.discrete_features):
+            unique_vals = sorted(self.full_df_transformed[disc_feat].unique())
+            data_groups = [
+                self.full_df_transformed[self.full_df_transformed[disc_feat] == val][
+                    feature
+                ].dropna()
+                for val in unique_vals
+            ]
+
+            ax_box = axes[i, 0]
+            bp = ax_box.boxplot(
+                data_groups, patch_artist=True, labels=self.mapping[disc_feat]
+            )
+
+            for patch, color in zip(bp["boxes"], colors):
+                patch.set_facecolor(color)
+                patch.set_alpha(0.7)
+
+            ax_box.set_title(
+                f"Distribution of {feature} by {disc_feat}",
+                fontsize=12,
+                fontweight="bold",
+            )
+            ax_box.set_ylabel(feature)
+
+            ax_scatter = axes[i, 1]
+            for val, color, label in zip(unique_vals, colors, self.mapping[disc_feat]):
+                subset = self.full_df_transformed[
+                    self.full_df_transformed[disc_feat] == val
+                ]
+                ax_scatter.scatter(
+                    subset.index,
+                    subset[feature],
+                    c=color,
+                    label=label,
+                    alpha=0.3,
+                    edgecolors=None,
+                    s=30,
+                )
+
+            ax_scatter.set_title(
+                f"{feature} Scatter colored by {disc_feat}",
+                fontsize=12,
+                fontweight="bold",
+            )
+            ax_scatter.set_ylabel(feature)
+            ax_scatter.legend()
+            ##########################################################
+            ax_kde = axes[i, 2]
+
+            for val, color, label in zip(unique_vals, colors, self.mapping[disc_feat]):
+                sns.kdeplot(
+                    data=self.full_df_transformed[
+                        self.full_df_transformed[disc_feat] == val
+                    ],
+                    x=feature,
+                    ax=ax_kde,
+                    fill=True,
+                    alpha=0.4,
+                    color=color,
+                    label=label,
+                )
+            ax_kde.set_title(f"{feature} KDE Overlap", fontweight="bold")
+            ax_kde.legend()
+            valid_df = self.full_df_transformed[[disc_feat, feature]].dropna()
+            r, _ = pearsonr(valid_df[disc_feat], valid_df[feature])
+            m, b, _, _, _ = linregress(valid_df[disc_feat], valid_df[feature])
+
+            print("\n" + "-" * 40)
+            print(f"{feature} vs {disc_feat}")
+
+            print("Regression:")
+            print(f"  {feature} = {m:.3f} × {disc_feat} + {b:.2f}")
+
+            print("Correlation:")
+            print(
+                f"  r = {r:.3f} → "
+                f"{'Weak' if abs(r) < 0.4 else 'Moderate' if abs(r) < 0.7 else 'Strong'} "
+                f"{'positive' if r > 0 else 'negative' if r < 0 else 'no'}"
+            )
+
+            print("-" * 40 + "\n")
+
+        plt.tight_layout()
+        # plt.savefig('olist_bivariate_analysis.png', dpi=150, bbox_inches='tight')
+        plt.show()
+
+    def discrete_versus_target_stacked(self, target_column):
+        features_to_plot = [f for f in self.discrete_features if f != target_column]
+
+        n = len(features_to_plot)
+        fig, axes = plt.subplots(n, 1, figsize=(10, 5 * n))
+
+        if n == 1:
+            axes = [axes]  # to become a list
+
+        for i, col in enumerate(features_to_plot):
+            ct = pd.crosstab(
+                self.full_df_transformed[col],
+                self.full_df_transformed[target_column],
+                normalize="index",
+            )  # to be normalization ratio
+
+            if col in self.mapping:  # to use the mapping as labels instead of numbers
+                ct.index = self.mapping[col]
+            if target_column in self.mapping:
+                ct.columns = self.mapping[target_column]
+
+            ct.plot(
+                kind="bar",
+                stacked=True,
+                ax=axes[i],
+                color=["#577BF1", "#CF27D4", "#3FEB0B"],
+                alpha=0.85,
+                edgecolor="white",
+            )
+
+            axes[i].set_title(
+                f"Target Distribution by {col}", fontsize=14, fontweight="bold"
+            )
+            axes[i].set_ylabel("Proportion")
+            axes[i].set_xlabel(col)
+            axes[i].legend(
+                title=target_column, bbox_to_anchor=(1.05, 1), loc="upper left"
+            )
+            axes[i].tick_params(axis="x", rotation=45)
+
+        plt.tight_layout()
+        plt.show()
+
+    def plot_large_correlation_matrix(self):
+        plt.figure(figsize=(20, 18))
+        features = self.full_df_transformed.columns
+        corr = self.full_df_transformed[features].corr()
+        mask = np.triu(np.ones_like(corr, dtype=bool))
+
+        sns.heatmap(
+            corr,
+            annot=False,
+            mask=mask,
+            cmap="RdBu",
+            center=0,
+            vmin=-1,
+            vmax=1,
+            square=True,
+            linewidths=0.1,
+            cbar_kws={"shrink": 0.8},
+        )
+
+        plt.title(f"Correlation Matrix for {len(features)} Features", fontsize=20)
+        plt.xticks(rotation=90)
+        plt.yticks(rotation=0)
         plt.show()
 
 
