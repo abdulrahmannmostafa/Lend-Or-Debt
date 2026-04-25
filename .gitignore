@@ -11,3 +11,5 @@
 .pytest_cache/
 .ruff_cache/
 .vscode/
+models/
+.out.tfevents
