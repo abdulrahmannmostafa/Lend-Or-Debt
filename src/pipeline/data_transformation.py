@@ -128,7 +128,9 @@ def engineer_credit_features(df: pd.DataFrame) -> pd.DataFrame:
 
     Features added
     --------------
-    utilisation_ratio  : avg_bill / (LIMIT_BAL)
+    utilisation_ratio  : avg_bill / (LIMIT_BAL + 1)
+        Normalises billing amount by credit limit; the +1 guard
+        prevents division by zero for zero-limit edge cases.
 
     LIMIT_BAL_sq       : LIMIT_BAL ** 2
         Squared term lets a linear model approximate the curvature
@@ -144,7 +146,7 @@ def engineer_credit_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
     if "avg_bill" in df.columns and "LIMIT_BAL" in df.columns:
-        df["utilisation_ratio"] = df["avg_bill"] / (df["LIMIT_BAL"])
+        df["utilisation_ratio"] = df["avg_bill"] / (df["LIMIT_BAL"] + 1)
         df["LIMIT_BAL_sq"] = df["LIMIT_BAL"] ** 2
         df["limit_x_bill"] = df["LIMIT_BAL"] * df["avg_bill"]
         log.info(
@@ -169,7 +171,7 @@ def engineer_payment_features(df: pd.DataFrame) -> pd.DataFrame:
 
     Features added
     --------------
-    payment_ratio       : avg_payment / (avg_bill)
+    payment_ratio       : avg_payment / (avg_bill + 1)
         Fraction of the average bill that is actually repaid each month.
         The most direct signal of repayment discipline.
         The +1 guard prevents division by zero for zero-bill months.
@@ -188,7 +190,8 @@ def engineer_payment_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
     if "avg_payment" in df.columns and "avg_bill" in df.columns:
-        df["payment_ratio"] = df["avg_payment"] / df["avg_bill"]
+        denominator = df["avg_bill"].replace(0, 1)
+        df["payment_ratio"] = df["avg_payment"] / denominator
         df["avg_unpaid_balance"] = df["avg_bill"] - df["avg_payment"]
         df["is_underpaying"] = (df["avg_payment"] < df["avg_bill"]).astype(int)
         log.info(
@@ -255,7 +258,7 @@ def engineer_macro_interactions(df: pd.DataFrame) -> pd.DataFrame:
 
     if "avg_macro_CPI" in df.columns and "total_delinquency" in df.columns:
         df["cpi_risk_norm"] = (
-            df["avg_macro_CPI"] * df["total_delinquency"] / (df["LIMIT_BAL"])
+            df["avg_macro_CPI"] * df["total_delinquency"] / (df["LIMIT_BAL"] + 1)
         )
         created.append("cpi_risk_norm")
 
