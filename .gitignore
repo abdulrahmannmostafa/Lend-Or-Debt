@@ -13,3 +13,4 @@
 .vscode/
 mlflow.db
 models/
+.out.tfevents
