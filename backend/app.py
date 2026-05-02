@@ -1,5 +1,10 @@
 import sys
 import os
+
+# ── path setup: add project root so src.pipeline.* is importable ──────────────
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, PROJECT_ROOT)
 import io
 import base64
 import subprocess
@@ -13,9 +18,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from src.pipeline.eda import EDA 
 
-# ── path setup: add project root so src.pipeline.* is importable ──────────────
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, PROJECT_ROOT)
+
 
 
 app = Flask(__name__)
@@ -114,9 +117,13 @@ def eda_init():
         train_input_transformed=abs_path("train_transformed", "data/transformed/train_transformed.csv"),
         val_input_transformed=abs_path("val_transformed",     "data/transformed/val_transformed.csv"),
         test_input_transformed=abs_path("test_transformed",   "data/transformed/test_transformed.csv"),
+        train_input_transformed_without_smote=abs_path("train_transformed_without_smote", "data/transformed/train_transformed_without_smote.csv"),
+        val_input_transformed_without_smote=abs_path("val_transformed_without_smote",     "data/transformed/val_transformed_without_smote.csv"),
+        test_input_transformed_without_smote=abs_path("test_transformed_without_smote",   "data/transformed/test_transformed_without_smote.csv"),
     )
     _eda_instance.load_data_cleaned()
     _eda_instance.load_data_transformed()
+    _eda_instance.load_data_transformed_without_smote()
 
     return jsonify({"message": "EDA instance ready"})
 
@@ -135,7 +142,7 @@ def eda_univariate():
 
     body      = request.json or {}
     column    = body.get("column")
-    data_type = int(body.get("data_type", 0))   # 0=transformed, 1=cleaned
+    data_type = int(body.get("data_type", 0))   # 0=transformed, 1=cleaned , 2=transformed without smote
 
     if not column:
         return jsonify({"error": "column is required"}), 400
@@ -155,13 +162,15 @@ def eda_pie():
     feature   = body.get("feature")
     data_type = int(body.get("data_type", 0))
 
-    if not feature:
-        return jsonify({"error": "feature is required"}), 400
-
-    # use EDA's own mapping if available, else identity
     mapping = eda.mapping.get(feature)
+
+    # convert list → dict if needed
+    if isinstance(mapping, list):
+        mapping = {i: v for i, v in enumerate(mapping)}
+
+    # fallback if no mapping exists
     if mapping is None:
-        df = eda.full_df_cleaned if data_type else eda.full_df_transformed
+        df = eda.full_df_cleaned if data_type == 1 else eda.full_df_transformed
         mapping = {v: str(v) for v in sorted(df[feature].dropna().unique())}
 
     plt.close("all")
@@ -175,14 +184,9 @@ def eda_continuous():
     eda, err = _require_eda()
     if err: return err
 
-    body     = request.json or {}
-    features = body.get("features")
-
-    if not features or not isinstance(features, list):
-        return jsonify({"error": "features must be a non-empty list of column names"}), 400
 
     plt.close("all")
-    eda.continues_versus_continuous_eda(continuous_features=features)
+    eda.continues_versus_continuous_eda()
     return jsonify({"image": capture_fig()})
 
 
@@ -241,8 +245,38 @@ def eda_columns():
         "cleaned":          list(eda.full_df_cleaned.columns)     if eda.full_df_cleaned     is not None else [],
         "transformed":      list(eda.full_df_transformed.columns) if eda.full_df_transformed is not None else [],
         "discrete_features": eda.discrete_features,
+        "mapping":           list(eda.mapping.keys()),
+        "continuous_features": eda.continuous_features,
     })
 
+
+
+# ── EDA: dashboard_with_smote ───────────────────────────────────────────────────────
+@app.route("/api/eda/dashboard_with_smote", methods=["POST"])
+def eda_dashboard_with_smote():
+    image_path = os.path.join(PROJECT_ROOT, "dashboard_with_smotes.png")
+    
+    if not os.path.exists(image_path):
+        return jsonify({"error": f"Image not found at {image_path}"}), 404
+    
+    with open(image_path, "rb") as img_file:
+        encoded = base64.b64encode(img_file.read()).decode("utf-8")
+    
+    return jsonify({"image": encoded})
+
+
+# ── EDA: dashboard_without_smote ───────────────────────────────────────────────────────
+@app.route("/api/eda/dashboard_without_smote", methods=["POST"])
+def eda_dashboard_without_smote():
+    image_path = os.path.join(PROJECT_ROOT, "dashboard_without_smotes.png")
+    
+    if not os.path.exists(image_path):
+        return jsonify({"error": f"Image not found at {image_path}"}), 404
+    
+    with open(image_path, "rb") as img_file:
+        encoded = base64.b64encode(img_file.read()).decode("utf-8")
+    
+    return jsonify({"image": encoded})
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)

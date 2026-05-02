@@ -41,6 +41,7 @@ export function EDASection() {
     if (!cols.error) setColumns(cols);
   };
 
+
   const colList = dataType === 1 ? columns.cleaned : columns.transformed;
 
   const runEDA = async () => {
@@ -52,6 +53,7 @@ export function EDASection() {
     if (tab === "univariate")                  body = { column, data_type: dataType };
     else if (tab === "pie")                    body = { feature: column, data_type: dataType };
     else if (tab === "discrete_vs_target")     body = { target_column: target };
+    else if (tab === "discrete_vs_continuous") body = { feature: column };
     // correlation needs no params
 
     const res = await post(`${API}/eda/${tab}`, body);
@@ -97,7 +99,7 @@ export function EDASection() {
             </div>
           )}
 
-          {(tab === "univariate" || tab === "pie") && (
+          {(tab === "univariate") && (
             <div className="row">
               <label>Column</label>
               <select value={column} onChange={(e) => setColumn(e.target.value)}>
@@ -105,6 +107,31 @@ export function EDASection() {
                 {colList.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
+          )}
+
+          {(tab === "pie") && (
+            <div className="row">
+              <label>Column</label>
+              <select value={column} onChange={(e) => setColumn(e.target.value)}>
+                <option value="">— pick column —</option>
+                {columns.mapping
+                  .filter((c) => colList.includes(c))
+                  .map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+
+          )}
+
+          {(tab === "discrete_vs_continuous") && (
+            <div className="row">
+              <label>Column</label>
+              <select value={column} onChange={(e) => setColumn(e.target.value)}>
+                <option value="">— pick column —</option>
+                {columns.continuous_features
+                  .map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+
           )}
 
           {tab === "discrete_vs_target" && (
