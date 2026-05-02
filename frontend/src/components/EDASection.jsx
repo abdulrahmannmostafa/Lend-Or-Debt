@@ -10,6 +10,8 @@ const EDA_TABS = [
   { id: "discrete_vs_continuous", label: "Discrete vs Continuous" },
   { id: "discrete_vs_target",     label: "Discrete vs Target" },
   { id: "correlation",            label: "Correlation Matrix" },
+  { id: "dashboard_with_smote",     label: "Dashboard with SMOTE" },
+  { id: "dashboard_without_smote",     label: "Dashboard without SMOTE" }
 ];
 
 export function EDASection() {
@@ -25,9 +27,7 @@ export function EDASection() {
 
   // per-tab params
   const [column,   setColumn]   = useState("");
-  const [dataType, setDataType] = useState(0); // 0=transformed 1=cleaned
-  const [features, setFeatures] = useState(""); // comma-separated
-  const [feature,  setFeature]  = useState("");
+  const [dataType, setDataType] = useState(0); // 0=transformed 1=cleaned 2=transformed without smote
   const [target,   setTarget]   = useState("");
 
   const initEDA = async () => {
@@ -51,8 +51,6 @@ export function EDASection() {
     let body = {};
     if (tab === "univariate")                  body = { column, data_type: dataType };
     else if (tab === "pie")                    body = { feature: column, data_type: dataType };
-    else if (tab === "continuous")             body = { features: features.split(",").map((s) => s.trim()).filter(Boolean) };
-    else if (tab === "discrete_vs_continuous") body = { feature };
     else if (tab === "discrete_vs_target")     body = { target_column: target };
     // correlation needs no params
 
@@ -94,6 +92,7 @@ export function EDASection() {
               <div className="seg">
                 <button className={dataType === 0 ? "active" : ""} onClick={() => setDataType(0)}>transformed</button>
                 <button className={dataType === 1 ? "active" : ""} onClick={() => setDataType(1)}>cleaned</button>
+                <button className={dataType === 2 ? "active" : ""} onClick={() => setDataType(2)}>transformed without smote</button>
               </div>
             </div>
           )}
@@ -104,28 +103,6 @@ export function EDASection() {
               <select value={column} onChange={(e) => setColumn(e.target.value)}>
                 <option value="">— pick column —</option>
                 {colList.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-          )}
-
-          {tab === "continuous" && (
-            <div className="row">
-              <label>Columns</label>
-              <input
-                type="text"
-                placeholder="col1, col2, col3 …"
-                value={features}
-                onChange={(e) => setFeatures(e.target.value)}
-              />
-            </div>
-          )}
-
-          {tab === "discrete_vs_continuous" && (
-            <div className="row">
-              <label>Feature</label>
-              <select value={feature} onChange={(e) => setFeature(e.target.value)}>
-                <option value="">— pick continuous feature —</option>
-                {columns.transformed.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
           )}

@@ -1,10 +1,11 @@
 import pandas as pd
-from fredapi import Fred
 from dotenv import load_dotenv
 import os
 
 
 def fetch_macro_data(api_key: str, save_path: str = "../data/macro_fred.csv"):
+    from fredapi import Fred
+
     fred = Fred(api_key=api_key)
 
     cpi = fred.get_series("CPIAUCSL").reset_index()
