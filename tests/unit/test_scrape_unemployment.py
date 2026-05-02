@@ -4,7 +4,6 @@ import pandas as pd
 import pytest
 from unittest.mock import MagicMock, patch
 
-# Corrected XML: use real Unicode string, then encode to bytes
 MOCK_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <root>
   <縣市別失業率>
