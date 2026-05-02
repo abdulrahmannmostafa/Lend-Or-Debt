@@ -31,3 +31,7 @@ def test_loading_checker_cleaned():
     expected = len(train_dataset) + len(val_dataset) + len(test_dataset)
     assert len(full_df) == expected    
     
+def test_loading_checker_transform_cleaned():    
+    train_dataset, val_dataset,test_dataset,full_df=eda.load_data_transformed_without_smote()
+    expected = len(train_dataset) + len(val_dataset) + len(test_dataset)
+    assert len(full_df) == expected        
