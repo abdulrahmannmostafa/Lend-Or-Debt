@@ -180,51 +180,47 @@ class DataLoader:
 
 
 def main():
-    
 
     dl = DataLoader()
     dl.run_experiment(
         model_type=6, smote=False, feature_selection="spearman", version=4, k=20
-        )
+    )
     dl.run_experiment(
         model_type=6, smote=False, feature_selection="mutual_info", version=5, k=20
-        )
+    )
     dl.run_experiment(
         model_type=6, smote=False, feature_selection="intersect", version=6, k=25
-        )
-    
+    )
+
     dl.run_experiment(
         model_type=7, smote=False, feature_selection="spearman", version=4, k=20
-        )
+    )
     dl.run_experiment(
         model_type=7, smote=False, feature_selection="mutual_info", version=5, k=20
-        )
+    )
     dl.run_experiment(
         model_type=7, smote=False, feature_selection="intersect", version=6, k=25
-        )
-    
+    )
+
     dl.run_experiment(
         model_type=8, smote=False, feature_selection="spearman", version=4, k=20
-        )
+    )
     dl.run_experiment(
         model_type=8, smote=False, feature_selection="mutual_info", version=5, k=20
-        )
+    )
     dl.run_experiment(
         model_type=8, smote=False, feature_selection="intersect", version=6, k=25
-        )
-    
+    )
+
     dl.run_experiment(
-    model_type=9, smote=False, feature_selection="spearman", version=4, k=20
-        )
+        model_type=9, smote=False, feature_selection="spearman", version=4, k=20
+    )
     dl.run_experiment(
         model_type=9, smote=False, feature_selection="mutual_info", version=5, k=20
-        )
+    )
     dl.run_experiment(
         model_type=9, smote=False, feature_selection="intersect", version=6, k=25
-        )
-    
-
-
+    )
 
 
 if __name__ == "__main__":
