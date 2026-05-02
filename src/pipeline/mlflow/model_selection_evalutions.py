@@ -1,20 +1,13 @@
-# 1. Standard libraries
 import warnings
-# sys.path.insert(
-#     0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
-# )
-
-# 3. Third-party libraries
 import matplotlib.pyplot as plt
 import mlflow
 import pandas as pd
 from loguru import logger
 
-# 4. Local imports
 from src.pipeline.config import (
-    test_transformed_path,
-    train_transformed_path,
-    val_transformed_path,
+    test_transformed_path_without_smote,
+    train_transformed_path_without_smote,
+    val_transformed_path_without_smote,
 )
 from src.pipeline.feature_extraction import FeatureExtractor
 from src.pipeline.mlflow.models import (
@@ -30,7 +23,6 @@ from src.pipeline.mlflow.models import (
     DecisionTreeModel,
 )
 
-# 5. Global Configuration (Executable code goes AFTER all imports)
 plt.style.use("dark_background")
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -38,22 +30,14 @@ warnings.filterwarnings("ignore", category=UserWarning)
 class DataLoader:
     def __init__(self):
         self.feature_extractor = FeatureExtractor()
-        self.logistic_regression_model = None
-        self.knn_model = None
-        self.svm_model = None
-        self.rf_model = None
-        self.xgboost = None
-        self.naive_bayes_model = None
 
     def load_data(self):
-        # Load datasets
-        self.train_data = pd.read_csv(train_transformed_path)
-        self.validation_data = pd.read_csv(val_transformed_path)
-        self.test_data = pd.read_csv(test_transformed_path)
+        self.train_data = pd.read_csv(train_transformed_path_without_smote)
+        self.validation_data = pd.read_csv(val_transformed_path_without_smote)
+        self.test_data = pd.read_csv(test_transformed_path_without_smote)
 
         target = "default payment next month"
 
-        # Split features and labels
         self.X_train, self.y_train = (
             self.train_data.drop(columns=[target]),
             self.train_data[target],
@@ -67,232 +51,176 @@ class DataLoader:
             self.test_data[target],
         )
 
-        # Log shapes using info
-        logger.info("Data Loaded Successfully:")
-        logger.info(f"  - Train shape: {self.X_train.shape}")
-        logger.info(f"  - Val shape:   {self.X_val.shape}")
-        logger.info(f"  - Test shape:  {self.X_test.shape}")
-
-    def print_class_distribution(self):
-
-        sets = [
-            ("Train", self.y_train),
-            ("Validation", self.y_val),
-            ("Test", self.y_test),
-        ]
-
-        for name, series in sets:
-            dist = series.value_counts(normalize=True) * 100
-            count = len(series)
-            logger.info(f"--- {name} Class Distribution (Total: {count}) ---")
-            for label, val in dist.items():
-                print(f" Class {label}: {val:.2f}%")
+        logger.success("Data Loaded Successfully")
 
     def prepare_features(self):
-        self.X_train_current = self.feature_extractor.smart_scaler(self.X_train)
-        self.y_train_current = self.y_train
+        self.X_train = self.feature_extractor.smart_scaler(self.X_train)
         self.X_val = self.feature_extractor.smart_scaler(self.X_val, 0)
         self.X_test = self.feature_extractor.smart_scaler(self.X_test, 0)
-        # self.feature_extractor.spearman_correlation(self.X_train_current,self.y_train_current)
 
     def run_logistic(self):
-        self.logistic_regression_model = LogisticRegressionModel(
-            self.X_train_current,
-            self.y_train_current,
-            self.X_val,
-            self.y_val,
-            self.X_test,
-            self.y_test,
+        model = LogisticRegressionModel(
+            self.X_train, self.y_train, self.X_val, self.y_val, self.X_test, self.y_test
         )
-        self.logistic_regression_model.model_train()
-        self.logistic_regression_model.model_predict()
-        self.logistic_regression_model.plot_learning_curve_for_smote()
-
-    # def run_poly_logistic(self):
-    #     self.logistic_Pregression_model=LogisticRegressionPolynomialModel(self.X_train_current,self.y_train_current,self.X_val,self.y_val,self.X_test,self.y_test)
-    #     self.logistic_Pregression_model.model_train()
-    #     self.logistic_Pregression_model.model_predict()
-    #     self.logistic_Pregression_model.plot_learning_curve()
-    def run_knn(self):
-        knn_model = KNNModel(
-            self.X_train_current,
-            self.y_train_current,
-            self.X_val,
-            self.y_val,
-            self.X_test,
-            self.y_test,
-        )
-        knn_model.model_train()
-        knn_model.model_predict()  # 60
-        knn_model.plot_learning_curve_for_smote()
-
-    def run_xgb(self):
-        xgb_model = XGBModel(
-            self.X_train_current,
-            self.y_train_current,
-            self.X_val,
-            self.y_val,
-            self.X_test,
-            self.y_test,
-        )
-        xgb_model.model_train()
-        xgb_model.model_predict()
-        xgb_model.plot_learning_curve_for_smote()
+        model.model_train()
+        model.model_predict()
 
     def run_rf(self):
-        rf_model = RFModel(
-            self.X_train_current,
-            self.y_train_current,
-            self.X_val,
-            self.y_val,
-            self.X_test,
-            self.y_test,
+        model = RFModel(
+            self.X_train, self.y_train, self.X_val, self.y_val, self.X_test, self.y_test
         )
-        rf_model.model_train()
-        rf_model.model_predict()
-        rf_model.plot_learning_curve_for_smote()
+        model.model_train()
+        model.model_predict()
 
-    def run_lightboost(self):
-        lgb_model = LGBMModel(
-            self.X_train_current,
-            self.y_train_current,
-            self.X_val,
-            self.y_val,
-            self.X_test,
-            self.y_test,
+    def run_xgb(self):
+        model = XGBModel(
+            self.X_train, self.y_train, self.X_val, self.y_val, self.X_test, self.y_test
         )
-        lgb_model.model_train()
-        lgb_model.model_predict()
-        lgb_model.plot_learning_curve_for_smote()
+        model.model_train()
+        model.model_predict()
 
-    def run_svm(self):
-        svm_model = SVMModel(
-            self.X_train_current,
-            self.y_train_current,
-            self.X_val,
-            self.y_val,
-            self.X_test,
-            self.y_test,
+    def run_lgbm(self):
+        model = LGBMModel(
+            self.X_train, self.y_train, self.X_val, self.y_val, self.X_test, self.y_test
         )
-        svm_model.model_train()
-        svm_model.model_predict()
-        svm_model.plot_learning_curve_for_smote()
+        model.model_train()
+        model.model_predict()
 
-    def run_extratrees(self):
-        extratrees_model = ExtraTreesModel(
-            self.X_train_current,
-            self.y_train_current,
-            self.X_val,
-            self.y_val,
-            self.X_test,
-            self.y_test,
+    def run_et(self):
+        model = ExtraTreesModel(
+            self.X_train, self.y_train, self.X_val, self.y_val, self.X_test, self.y_test
         )
-        extratrees_model.model_train()
-        extratrees_model.model_predict()
-        extratrees_model.plot_learning_curve_for_smote()
+        model.model_train()
+        model.model_predict()
 
     def run_catboost(self):
-        catboost_model = CatBoostModel(
-            self.X_train_current,
-            self.y_train_current,
-            self.X_val,
-            self.y_val,
-            self.X_test,
-            self.y_test,
+        model = CatBoostModel(
+            self.X_train, self.y_train, self.X_val, self.y_val, self.X_test, self.y_test
         )
-        catboost_model.model_train()
-        catboost_model.model_predict()
-        catboost_model.plot_learning_curve_for_smote()
-
-    def run_adaboost(self):
-        adaboost_model = AdaBoostModel(
-            self.X_train_current,
-            self.y_train_current,
-            self.X_val,
-            self.y_val,
-            self.X_test,
-            self.y_test,
-        )
-        adaboost_model.model_train()
-        adaboost_model.model_predict()
-        adaboost_model.plot_learning_curve_for_smote()
+        model.model_train()
+        model.model_predict()
 
     def run_dt(self):
-        decisiontree_model = DecisionTreeModel(
-            self.X_train_current,
-            self.y_train_current,
-            self.X_val,
-            self.y_val,
-            self.X_test,
-            self.y_test,
+        model = DecisionTreeModel(
+            self.X_train, self.y_train, self.X_val, self.y_val, self.X_test, self.y_test
         )
-        decisiontree_model.model_train()
-        decisiontree_model.model_predict()
-        decisiontree_model.plot_learning_curve_for_smote()
+        model.model_train()
+        model.model_predict()
 
-    def run_experiment(self, model_type):
+    def run_adaboost(self):
+        model = AdaBoostModel(
+            self.X_train, self.y_train, self.X_val, self.y_val, self.X_test, self.y_test
+        )
+        model.model_train()
+        model.model_predict()
+
+    def run_knn(self):
+        model = KNNModel(
+            self.X_train, self.y_train, self.X_val, self.y_val, self.X_test, self.y_test
+        )
+        model.model_train()
+        model.model_predict()
+
+    def run_svm(self):
+        model = SVMModel(
+            self.X_train, self.y_train, self.X_val, self.y_val, self.X_test, self.y_test
+        )
+        model.model_train()
+        model.model_predict()
+
+    def run_experiment(
+        self, model_type, smote=True, feature_selection="spearman", version=1, k=20
+    ):
+        logger.info("Loading dataset")
         self.load_data()
-        self.print_class_distribution()
+        logger.info("Preparing features")
         self.prepare_features()
 
         results = self.feature_extractor.test_feature_selection_methods(
-            self.X_train_current, self.y_train_current, k=30
+            self.X_train, self.y_train, k=k
         )
-        mi = set(results["mutual_info"]["cols"])
-        sp = set(results["spearman"]["cols"])
-        selected = list(mi & sp)
-
-        self.X_train_current = self.X_train_current[selected]
+        if feature_selection == "intersect":
+            selected = list(
+                set(results["spearman"]["cols"]) & set(results["mutual_info"]["cols"])
+            )
+        else:
+            selected = list(set(results[feature_selection]["cols"]))
+        self.X_train = self.X_train[selected]
         self.X_val = self.X_val[selected]
         self.X_test = self.X_test[selected]
 
-        model_names = {
-            0: "logistic",
-            1: "knn",
-            2: "rf",
-            3: "xgb",
-            4: "lgbm",
-            5: "svm",
-            6: "extratrees",
-            7: "catboost",
-            8: "adaboost",
-            9: "decisiontrees",
+        model_map = {
+            0: ("logistic", self.run_logistic),
+            1: ("rf", self.run_rf),
+            2: ("xgb", self.run_xgb),
+            3: ("lgbm", self.run_lgbm),
+            4: ("et", self.run_et),
+            5: ("catboost", self.run_catboost),
+            6: ("dt", self.run_dt),
+            7: ("adaboost", self.run_adaboost),
+            8: ("knn", self.run_knn),
+            9: ("svm", self.run_svm),
         }
+
         mlflow.set_tracking_uri("http://127.0.0.1:5000")
         mlflow.set_experiment("data_science_Project_team1")
 
-        with mlflow.start_run(run_name=model_names[model_type]):
-            mlflow.log_param("model_type", model_names[model_type])
-            mlflow.log_param("n_features_selected", len(selected))
-            mlflow.log_param("feature_selection", "mutual_info & spearman")
-            # mlflow.log_param("smote_applied", False)
+        model_name, model_fn = model_map[model_type]
 
-            ################################################3
-            if model_type == 0:
-                self.run_logistic()
-            elif model_type == 1:
-                self.run_knn()
-            elif model_type == 2:
-                self.run_rf()
-            elif model_type == 3:
-                self.run_xgb()
-            elif model_type == 4:
-                self.run_lightboost()
-            elif model_type == 5:
-                self.run_svm()
-            elif model_type == 6:
-                self.run_extratrees()
-            elif model_type == 7:
-                self.run_catboost()
-            elif model_type == 8:
-                self.run_adaboost()
-            elif model_type == 9:
-                self.run_dt()
+        run_name = f"{model_name}_v{version}_{feature_selection}_{'smote' if smote else 'no_smote'}"
+
+        with mlflow.start_run(run_name=run_name):
+            logger.info(f"Running: {run_name}")
+            model_fn()
+            mlflow.set_tag("model_type", model_name)
+            mlflow.set_tag("smote_applied", smote)
+            mlflow.set_tag("feature_selection", feature_selection)
+            mlflow.set_tag("n_features_selected", len(selected))
+            mlflow.log_param("version", version)
 
 
 def main():
-    dataloader = DataLoader()
-    dataloader.run_experiment(model_type=5)
+
+    dl = DataLoader()
+    dl.run_experiment(
+        model_type=6, smote=False, feature_selection="spearman", version=4, k=20
+    )
+    dl.run_experiment(
+        model_type=6, smote=False, feature_selection="mutual_info", version=5, k=20
+    )
+    dl.run_experiment(
+        model_type=6, smote=False, feature_selection="intersect", version=6, k=25
+    )
+
+    dl.run_experiment(
+        model_type=7, smote=False, feature_selection="spearman", version=4, k=20
+    )
+    dl.run_experiment(
+        model_type=7, smote=False, feature_selection="mutual_info", version=5, k=20
+    )
+    dl.run_experiment(
+        model_type=7, smote=False, feature_selection="intersect", version=6, k=25
+    )
+
+    dl.run_experiment(
+        model_type=8, smote=False, feature_selection="spearman", version=4, k=20
+    )
+    dl.run_experiment(
+        model_type=8, smote=False, feature_selection="mutual_info", version=5, k=20
+    )
+    dl.run_experiment(
+        model_type=8, smote=False, feature_selection="intersect", version=6, k=25
+    )
+
+    dl.run_experiment(
+        model_type=9, smote=False, feature_selection="spearman", version=4, k=20
+    )
+    dl.run_experiment(
+        model_type=9, smote=False, feature_selection="mutual_info", version=5, k=20
+    )
+    dl.run_experiment(
+        model_type=9, smote=False, feature_selection="intersect", version=6, k=25
+    )
 
 
 if __name__ == "__main__":
