@@ -174,7 +174,7 @@ class EDA:
         counts_series = full_df[feature].map(mapping)
         counts = counts_series.value_counts()
         num_categories = len(counts)
-        indices = np.random.choice(len(palette), size=num_categories, replace=False)
+        indices = np.random.choice(len(palette), size=num_categories, replace=True)
         colors = [palette[i] for i in indices]
         plt.pie(
             counts,

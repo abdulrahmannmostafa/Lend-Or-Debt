@@ -715,31 +715,31 @@ def run_transformation(
     train_df.to_csv(train_output, index=False)
     log.info("Saved train -> %s", train_output)
 
-
+def check_required_files(paths):
+    missing = [p for p in paths if not Path(p).exists()]
+    if missing:
+        raise FileNotFoundError(f"Missing required files: {missing}")
+    
 if __name__ == "__main__":
-    run_transformation(
-        train_input="data/clean/train_cleaned.csv",
-        val_input="data/clean/val_cleaned.csv",
-        test_input="data/clean/test_cleaned.csv",
-        train_output="data/transformed/train_transformed.csv",
-        val_output="data/transformed/val_transformed.csv",
-        test_output="data/transformed/test_transformed.csv",
-    )
-
-if __name__ != "__main__":
     try:
-        if (
-            Path("data/clean/test_cleaned.csv").exists()
-            and Path("data/clean/train_cleaned.csv").exists()
-            and Path("data/clean/val_cleaned.csv").exists()
-        ):
-            run_transformation(
-                train_input="data/clean/train_cleaned.csv",
-                val_input="data/clean/val_cleaned.csv",
-                test_input="data/clean/test_cleaned.csv",
-                train_output="data/transformed/train_transformed.csv",
-                val_output="data/transformed/val_transformed.csv",
-                test_output="data/transformed/test_transformed.csv",
-            )
+        train_path = "data/clean/train_cleaned.csv"
+        val_path = "data/clean/val_cleaned.csv"
+        test_path = "data/clean/test_cleaned.csv"
+
+        check_required_files([train_path, val_path, test_path])
+
+        run_transformation(
+            train_input=train_path,
+            val_input=val_path,
+            test_input=test_path,
+            train_output="data/transformed/train_transformed.csv",
+            val_output="data/transformed/val_transformed.csv",
+            test_output="data/transformed/test_transformed.csv",
+        )
+
+        log.info("Transformation completed successfully.")
+
     except Exception as e:
-        log.warning(f"Auto-transformation failed during import: {e}")
+        log.exception(f"Transformation script failed: {e}")
+        raise   
+
