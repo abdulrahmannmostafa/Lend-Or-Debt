@@ -11,5 +11,6 @@
 .pytest_cache/
 .ruff_cache/
 .vscode/
+mlflow.db
 models/
 .out.tfevents
