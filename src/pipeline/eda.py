@@ -326,6 +326,39 @@ class EDA:
             plt.tight_layout()
             plt.show()
 
+    def continuous_vs_continuous_eda(self, feature_1, feature_2):
+        mask = (
+            ~self.full_df_transformed[feature_1].isna()
+            & ~self.full_df_transformed[feature_2].isna()
+        )
+        x_data = self.full_df_transformed[feature_1][mask]
+        y_data = self.full_df_transformed[feature_2][mask]
+
+        fig, ax = plt.subplots(figsize=(10, 8))
+        ax.scatter(x_data, y_data, alpha=0.3, color="#E02EBA", s=15)
+
+        if len(x_data) > 0:
+            m, b, r, p, _ = stats.linregress(x_data, y_data)
+            x_line = np.linspace(x_data.min(), x_data.max(), 100)
+            ax.plot(
+                x_line,
+                m * x_line + b,
+                color="#3FEB0B",
+                lw=2,
+                label=f"r={r:.2f}",
+            )
+            ax.legend(loc="upper right")
+
+        ax.set_title(
+            f"Analysis: {feature_1} vs {feature_2}", fontsize=16, fontweight="bold"
+        )
+        ax.set_xlabel(feature_1)
+        ax.set_ylabel(feature_2)
+        ax.grid(True, linestyle="--", alpha=0.3)
+
+        plt.tight_layout()
+        plt.show()
+
     def continuous_versus_discrete_eda(self, feature):
         n = len(self.discrete_features)
         fig, axes = plt.subplots(n, 3, figsize=(15, 6 * n))
@@ -537,4 +570,6 @@ if __name__ != "__main__":
                 test_input_transformed="data/transformed/test_transformed.csv",
             )
     except Exception as e:
+        logger.warning(f"Auto-eda failed during import: {e}")
+
         logger.warning(f"Auto-eda failed during import: {e}")
