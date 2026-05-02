@@ -715,11 +715,13 @@ def run_transformation(
     train_df.to_csv(train_output, index=False)
     log.info("Saved train -> %s", train_output)
 
+
 def check_required_files(paths):
     missing = [p for p in paths if not Path(p).exists()]
     if missing:
         raise FileNotFoundError(f"Missing required files: {missing}")
-    
+
+
 if __name__ == "__main__":
     try:
         train_path = "data/clean/train_cleaned.csv"
@@ -741,5 +743,4 @@ if __name__ == "__main__":
 
     except Exception as e:
         log.exception(f"Transformation script failed: {e}")
-        raise   
-
+        raise

@@ -349,7 +349,9 @@ class EDA:
             )
             ax.legend(loc="upper right")
 
-        ax.set_title(f"Analysis: {feature_1} vs {feature_2}", fontsize=16, fontweight="bold")
+        ax.set_title(
+            f"Analysis: {feature_1} vs {feature_2}", fontsize=16, fontweight="bold"
+        )
         ax.set_xlabel(feature_1)
         ax.set_ylabel(feature_2)
         ax.grid(True, linestyle="--", alpha=0.3)

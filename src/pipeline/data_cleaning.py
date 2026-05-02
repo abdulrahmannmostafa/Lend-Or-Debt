@@ -237,7 +237,6 @@ if __name__ == "__main__":
                 test_output="data/clean/test_cleaned.csv",
             )
         else:
-                log.warning("Input file not found for standalone run.")
+            log.warning("Input file not found for standalone run.")
     except Exception as _e:
         log.warning("Standalone run failed: %s", _e)
-
