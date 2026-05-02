@@ -27,6 +27,8 @@ export function EDASection() {
 
   // per-tab params
   const [column,   setColumn]   = useState("");
+  const [feature1, setFeature1] = useState("");
+  const [feature2, setFeature2] = useState("");
   const [dataType, setDataType] = useState(0); // 0=transformed 1=cleaned 2=transformed without smote
   const [target,   setTarget]   = useState("");
 
@@ -43,6 +45,7 @@ export function EDASection() {
 
 
   const colList = dataType === 1 ? columns.cleaned : columns.transformed;
+  const continuousColumns = columns.continuous_features || [];
 
   const runEDA = async () => {
     setLoading(true);
@@ -52,9 +55,34 @@ export function EDASection() {
     let body = {};
     if (tab === "univariate")                  body = { column, data_type: dataType };
     else if (tab === "pie")                    body = { feature: column, data_type: dataType };
+    else if (tab === "continuous")             body = { feature_1: feature1, feature_2: feature2 };
     else if (tab === "discrete_vs_target")     body = { target_column: target };
     else if (tab === "discrete_vs_continuous") body = { feature: column };
     // correlation needs no params
+
+    if (tab === "continuous" && (!feature1 || !feature2 || feature1 === feature2)) {
+      setLoading(false);
+      setError("Choose two different continuous columns");
+      return;
+    }
+
+    if(tab == "discrete_vs_target" && !target) {
+      setLoading(false);
+      setError("Choose a target column");
+      return;
+    }
+
+    if(tab == "discrete_vs_continuous" && !column) {
+      setLoading(false);
+      setError("Choose a column");
+      return;
+    }
+
+    if ((tab === "univariate" || tab === "pie") && !column) {
+      setLoading(false);
+      setError("Choose a column");
+      return;
+    }
 
     const res = await post(`${API}/eda/${tab}`, body);
     setLoading(false);
@@ -120,6 +148,22 @@ export function EDASection() {
               </select>
             </div>
 
+          )}
+
+          {tab === "continuous" && (
+            <div className="row">
+              <label>Feature 1</label>
+              <select value={feature1} onChange={(e) => setFeature1(e.target.value)}>
+                <option value="">— pick first column —</option>
+                {continuousColumns.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+
+              <label>Feature 2</label>
+              <select value={feature2} onChange={(e) => setFeature2(e.target.value)}>
+                <option value="">— pick second column —</option>
+                {continuousColumns.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
           )}
 
           {(tab === "discrete_vs_continuous") && (

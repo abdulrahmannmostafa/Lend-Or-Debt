@@ -184,9 +184,19 @@ def eda_continuous():
     eda, err = _require_eda()
     if err: return err
 
+    body = request.json or {}
+    feature_1 = body.get("feature_1")
+    feature_2 = body.get("feature_2")
+
+    if not feature_1 or not feature_2:
+        transformed = eda.full_df_transformed.columns if eda.full_df_transformed is not None else []
+        available_features = [c for c in transformed if c not in eda.discrete_features]
+        if len(available_features) < 2:
+            return jsonify({"error": "Need at least two continuous features"}), 400
+        feature_1, feature_2 = available_features[:2]
 
     plt.close("all")
-    eda.continues_versus_continuous_eda()
+    eda.continuous_vs_continuous_eda(feature_1, feature_2)
     return jsonify({"image": capture_fig()})
 
 
