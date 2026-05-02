@@ -1,5 +1,9 @@
 # Standard libraries
+import os
+
 # Third-party libraries
+from imblearn.pipeline import Pipeline
+from loguru import logger
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -22,17 +26,19 @@ from sklearn.metrics import (
     f1_score,
     matthews_corrcoef,
 )
-from sklearn.svm import SVC
+from sklearn.svm import LinearSVC
 from sklearn.neighbors import KNeighborsClassifier
 from xgboost import XGBClassifier
-
+from sklearn.kernel_approximation import Nystroem
+from sklearn.model_selection import cross_val_score, learning_curve
+from sklearn.metrics import roc_curve, auc
 # Local imports
 
-# 1. Global Configuration/Setup
+# 1. Global Configuration
 plt.style.use("dark_background")
 
 
-class LogisticRegressionModel:
+class BaseModel:
     def __init__(self, X_train, y_train, X_val, y_val, X_test, y_test):
         self.X_train = X_train
         self.y_train = y_train
@@ -40,1148 +46,658 @@ class LogisticRegressionModel:
         self.y_val = y_val
         self.X_test = X_test
         self.y_test = y_test
-        self.best_logreg_model = None
+        self.model = None
+        self.best_params = None
+
+    def train_final_model(self):
+        # after hyperparameter tunning like in ml course
+        X = pd.concat([self.X_train, self.X_val])
+        y = pd.concat([self.y_train, self.y_val])
+        self.model.fit(X, y)
+
+    def find_best_threshold_mcc(self, proba, y_true=None):
+        # I rely on mcc like lecture for imbalanced cases
+        if (
+            y_true is None
+        ):  # used in predict function as second step after choosing the model
+            y_true = self.y_test
+        best_mcc, best_t = 0, 0.5
+        for t in [0.3, 0.4, 0.5, 0.6]:
+            y_pred = (proba > t).astype(int)
+            mcc = matthews_corrcoef(y_true, y_pred)
+            if mcc > best_mcc:
+                best_mcc, best_t = mcc, t
+        return best_mcc, best_t
+
+    def cross_validate(self, scoring="f1_macro", cv=5):
+        # this a step for registering overfitting beside the plot
+        scores = cross_val_score(
+            self.model, self.X_train, self.y_train, cv=cv, scoring=scoring
+        )
+        mlflow.log_metric("cv_f1_mean", scores.mean())
+        mlflow.log_metric("cv_f1_std", scores.std())
+        return scores
+
+    def evaluate(self, proba):
+        # This for predict in models to track in mlflow some metrices
+        best_mcc, best_t = self.find_best_threshold_mcc(proba)
+        y_pred = (proba > best_t).astype(
+            int
+        )  # convert from probability to final labels
+        cm = confusion_matrix(self.y_test, y_pred)
+        tn, fp, fn, tp = cm.ravel()
+        report = classification_report(self.y_test, y_pred, output_dict=True)
+        # MLflow metrics
+        mlflow.log_metric("mcc", best_mcc)
+        mlflow.log_metric("accuracy", accuracy_score(self.y_test, y_pred))
+        mlflow.log_metric("precision_macro", report["macro avg"]["precision"])
+        mlflow.log_metric("recall_macro", report["macro avg"]["recall"])
+        mlflow.log_metric("f1_macro", f1_score(self.y_test, y_pred, average="macro"))
+        # Business metric
+        mlflow.log_metric(
+            "business_cost", fn * 10 + fp * 1
+        )  # here we assume ratio 10/1
+        return y_pred, cm, best_mcc, best_t
+
+    def plot_roc(self, proba, model_name="model"):
+        fpr, tpr, _ = roc_curve(self.y_test, proba)
+        roc_auc = auc(fpr, tpr)
+        mlflow.log_metric("roc_auc", roc_auc)
+        path = f"/tmp/roc_curve_{model_name}.png"
+        plt.figure()
+        plt.plot(fpr, tpr, label=f"AUC = {roc_auc:.3f}")
+        plt.plot([0, 1], [0, 1], "--")
+        plt.title(f"ROC Curve - {model_name}")
+        plt.legend()
+        plt.savefig(path)
+        plt.close()
+        mlflow.log_artifact(path, artifact_path="plots")
+        os.remove(path)
+
+    def plot_confusion_matrix(self, cm, model_name="model"):
+        path = f"/tmp/confusion_matrix_{model_name}.png"
+        plt.figure()
+        ConfusionMatrixDisplay(cm).plot()
+        plt.title(f"Confusion Matrix - {model_name}")
+        plt.savefig(path)
+        plt.close()
+        mlflow.log_artifact(path, artifact_path="plots")
+        os.remove(path)
+
+    def plot_learning_curve(self, model_name="model"):
+        path = f"/tmp/learning_curve_{model_name}.png"
+        model = (
+            self.model.__class__(**self.best_params)
+            if self.best_params
+            else self.model.__class__()
+        )
+        train_sizes = []
+        train_scores = []
+        val_scores = []
+        for p in np.linspace(0.1, 1.0, 10):
+            n = int(p * len(self.X_train))
+            train_sizes.append(n)
+            X_sub = self.X_train[:n]
+            y_sub = self.y_train[:n]
+            model.fit(X_sub, y_sub)
+            train_scores.append(f1_score(y_sub, model.predict(X_sub), average="macro"))
+            val_scores.append(
+                f1_score(self.y_val, model.predict(self.X_val), average="macro")
+            )
+
+        # with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+        #     path = path
+        plt.figure()
+        plt.plot(train_sizes, train_scores, label="Train")
+        plt.plot(train_sizes, val_scores, label="Validation")
+        plt.title("Learning Curve")
+        plt.legend()
+        plt.savefig(path)
+        plt.close()
+        mlflow.log_artifact(path, artifact_path="plots")
+        os.remove(path)
+
+    def log_classification_report(self, y_pred, model_name="model"):
+        report_text = classification_report(self.y_test, y_pred)
+        path = f"/tmp/classification_report_{model_name}.txt"
+        with open(path, "w") as f:
+            f.write(report_text)
+        mlflow.log_artifact(path, artifact_path="reports")
+        os.remove(path)
+
+    def log_error_analysis(self, y_pred, model_name="model"):
+        y_pred_series = pd.Series(y_pred, index=self.y_test.index)
+        mask = y_pred_series != self.y_test
+        errors = self.X_test[mask].copy()
+        errors["true"] = self.y_test[mask]
+        errors["pred"] = y_pred_series[mask]
+        path = f"/tmp/error_analysis_{model_name}.csv"
+        errors.to_csv(path, index=False)
+        mlflow.log_artifact(path, artifact_path="errors")
+        os.remove(path)
+
+    def log_and_register_model(self, model_name):
+        mlflow.sklearn.log_model(self.model, "model")
+        run_id = mlflow.active_run().info.run_id
+        mlflow.register_model(f"runs:/{run_id}/model", model_name)
+
+
+class LogisticRegressionModel(BaseModel):
+    def __init__(self, X_train, y_train, X_val, y_val, X_test, y_test):
+        super().__init__(X_train, y_train, X_val, y_val, X_test, y_test)
+        self.best_logreg_params = None
 
     def objective_logreg(self, trial):
-
-        solver = trial.suggest_categorical("solver", ["liblinear", "saga", "lbfgs"])
-
-        l1_ratio = trial.suggest_float("l1_ratio", 0.0, 1.0)
-
-        param = {
+        solver = trial.suggest_categorical(
+            "solver", ["liblinear", "saga", "lbfgs"]
+        )  # algorithm to find best weight
+        l1_ratio = trial.suggest_float("l1_ratio", 0.0, 1.0)  # penalty type
+        params = {
             "C": trial.suggest_float(
                 "C", 1e-3, 10.0, log=True
             ),  # inverse of regularization term
             "solver": solver,
-            "max_iter": 4000,
+            "max_iter": 10000,
             "random_state": 42,
             "class_weight": "balanced",
         }
-
         if solver == "lbfgs":
-            l1_ratio = 0
-            # param["penalty"] = "l2"
-
+            l1_ratio = 0  # L2
         if solver == "liblinear":
             if l1_ratio not in [0, 1]:
                 raise optuna.exceptions.TrialPruned()
-
         if solver == "saga":
-            param["l1_ratio"] = l1_ratio
-
-        model = LogisticRegression(**param)
+            params["l1_ratio"] = l1_ratio
+        model = LogisticRegression(**params)
         model.fit(self.X_train, self.y_train)
-
-        y_proba = model.predict_proba(self.X_val)[:, 1]
-
-        best_mcc = -1
-        for t in [0.3, 0.4, 0.5, 0.6]:
-            y_pred = (y_proba > t).astype(int)
-            # f1 = f1_score(self.y_val, y_pred, average="macro")
-            mcc = matthews_corrcoef(self.y_val, y_pred)
-            if mcc > best_mcc:
-                best_mcc = mcc
-
+        proba = model.predict_proba(self.X_val)[:, 1]
+        best_mcc, _ = self.find_best_threshold_mcc(proba, y_true=self.y_val)
         return best_mcc
 
     def model_train(self):
-        study_logreg = optuna.create_study(direction="maximize")
-        study_logreg.optimize(self.objective_logreg, n_trials=15, n_jobs=2)
-
-        best_params = study_logreg.best_params.copy()
-
-        solver = best_params.get("solver")
-
-        if solver == "lbfgs":
-            best_params.pop("l1_ratio", None)
-            # best_params["penalty"] = "l2"
-        elif solver == "liblinear":
-            best_params.pop("l1_ratio", None)
-
-        X_combined = pd.concat([self.X_train, self.X_val])
-        y_combined = pd.concat([self.y_train, self.y_val])
-
-        self.best_logreg_model = LogisticRegression(
-            **best_params, max_iter=4000, random_state=42
+        logger.info("Training Logistic Regression")
+        study = optuna.create_study(direction="maximize")
+        study.optimize(self.objective_logreg, n_trials=50, n_jobs=2)
+        self.best_logreg_params = study.best_params.copy()
+        if self.best_logreg_params.get("solver") in ["lbfgs", "liblinear"]:
+            self.best_logreg_params.pop("l1_ratio", None)
+        self.model = LogisticRegression(
+            **self.best_logreg_params, max_iter=10000, random_state=42
         )
-        self.best_logreg_params = best_params
-        self.best_logreg_model.fit(X_combined, y_combined)
-
+        self.best_params = self.best_logreg_params
+        self.train_final_model()
         mlflow.log_params(self.best_logreg_params)
+        mlflow.log_param("model_name", "logistic_regression")
+        self.cross_validate()
+        logger.success("Training done")
 
     def model_predict(self):
-        proba = self.best_logreg_model.predict_proba(self.X_test)[:, 1]
-
-        best_f1, best_t = 0, 0.5
-        for t in [0.3, 0.4, 0.5, 0.6]:
-            y_pred = (proba > t).astype(int)
-            f1 = f1_score(self.y_test, y_pred, average="macro")
-            if f1 > best_f1:
-                best_f1, best_t = f1, t
-
-        y_pred = (proba > best_t).astype(int)
-
-        # --- Metrics & Reports ---
-        report_dict = classification_report(self.y_test, y_pred, output_dict=True)
-        report_text = classification_report(self.y_test, y_pred)
-
-        # MLflow Logging
-        mlflow.log_metric("f1_macro", best_f1)
-        mlflow.log_metric("accuracy", accuracy_score(self.y_test, y_pred))
-        mlflow.log_metric("mcc", matthews_corrcoef(self.y_test, y_pred))
-        mlflow.log_metric("best_threshold", best_t)
-        mlflow.log_metric("precision_macro", report_dict["macro avg"]["precision"])
-        mlflow.log_metric("recall_macro", report_dict["macro avg"]["recall"])
-        mlflow.sklearn.log_model(self.best_logreg_model, "model")
-
-        # Save Report Artifact
-        report_filename = f"classification_report_{self.__class__.__name__}.txt"
-        with open(report_filename, "w") as f:
-            f.write(report_text)
-        mlflow.log_artifact(report_filename)
-
-        # Confusion Matrix Artifact
-        model_name = self.__class__.__name__
-        cm_filename = f"confusion_matrix_{model_name}.png"
-        plt.figure(figsize=(8, 6))
-        cm = confusion_matrix(self.y_test, y_pred)
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-        disp.plot(cmap="Blues")
-        plt.title(f"Confusion Matrix - {model_name}")
-        plt.savefig(cm_filename, bbox_inches="tight")
-        mlflow.log_artifact(cm_filename)
-        plt.close()
-
-        # --- Printing ---
-        print(f"\n{'=' * 20} {self.__class__.__name__} {'=' * 20}")
-        print(f"Best Threshold: {best_t}")
-        print(f"Test Accuracy: {accuracy_score(self.y_test, y_pred):.4f}")
-        print("\nClassification Report:\n", report_text)
-
-    def plot_learning_curve_for_smote(self):
-
-        model = LogisticRegression(
-            **self.best_logreg_params if hasattr(self, "best_logreg_params") else {},
-            max_iter=4000,
-            random_state=42,
-        )
-
-        train_percentages = np.linspace(0.1, 1.0, 10)
-        train_sizes = []
-        train_scores = []
-        val_scores = []
-
-        for p in train_percentages:
-            n_samples = int(p * len(self.X_train))
-            train_sizes.append(n_samples)
-
-            X_subset = self.X_train[:n_samples]
-            y_subset = self.y_train[:n_samples]
-
-            model.fit(X_subset, y_subset)
-
-            y_train_pred = model.predict(X_subset)
-            train_scores.append(f1_score(y_subset, y_train_pred, average="macro"))
-
-            y_val_pred = model.predict(self.X_val)
-            val_scores.append(f1_score(self.y_val, y_val_pred, average="macro"))
-
-        model_name = self.__class__.__name__
-        lc_filename = f"learning_curve_smote_{model_name}.png"
-
-        plt.figure(figsize=(10, 6))
-        plt.plot(
-            train_sizes,
-            train_scores,
-            "o-",
-            color="#a427d6",
-            label="Train F1 (SMOTE Data)",
-        )
-        plt.plot(
-            train_sizes,
-            val_scores,
-            "o-",
-            color="#2ca02c",
-            label="Validation F1 (Original Data)",
-        )
-
-        plt.xlabel("Number of Training Samples")
-        plt.ylabel("F1 Score (Macro)")
-        plt.title(f"SMOTE Learning Curve Analysis - {model_name}")
-        plt.legend(loc="lower right")
-        plt.grid(True, linestyle="--", alpha=0.6)
-
-        plt.fill_between(
-            train_sizes,
-            train_scores,
-            val_scores,
-            color="gray",
-            alpha=0.1,
-            label="Overfitting Gap",
-        )
-
-        plt.savefig(lc_filename, bbox_inches="tight")
-        mlflow.log_artifact(lc_filename)
-
-        # plt.show()
-        plt.close()
+        logger.info("Predicting Logistic Regression")
+        proba = self.model.predict_proba(self.X_test)[:, 1]
+        y_pred, cm, best_mcc, best_t = self.evaluate(proba)
+        self.log_classification_report(y_pred, model_name="logistic")
+        self.log_error_analysis(y_pred, model_name="logistic")
+        self.plot_confusion_matrix(cm, model_name="logistic")
+        self.plot_roc(proba, model_name="logistic")
+        self.plot_learning_curve(model_name="logistic")
+        self.log_and_register_model("logistic_regression")
+        logger.success(f"Done | MCC={best_mcc:.4f} | T={best_t}")
 
 
-class KNNModel:
+########################################################################
+class KNNModel(BaseModel):
     def __init__(self, X_train, y_train, X_val, y_val, X_test, y_test):
-        self.X_train = X_train
-        self.y_train = y_train
-        self.X_val = X_val
-        self.y_val = y_val
-        self.X_test = X_test
-        self.y_test = y_test
-        self.best_knn_model = None
-        self.best_knn_params = None
+        super().__init__(X_train, y_train, X_val, y_val, X_test, y_test)
+        self.best_params = None
 
     def objective_knn(self, trial):
-        param = {
-            "n_neighbors": trial.suggest_int("n_neighbors", 10, 50),
+        params = {
+            "n_neighbors": trial.suggest_int("n_neighbors", 5, 30),
             "weights": trial.suggest_categorical("weights", ["uniform", "distance"]),
-            "metric": trial.suggest_categorical(
-                "metric", ["euclidean", "manhattan", "minkowski"]
-            ),
+            "metric": trial.suggest_categorical("metric", ["euclidean", "manhattan"]),
             "algorithm": trial.suggest_categorical(
                 "algorithm", ["ball_tree", "kd_tree"]
             ),
         }
 
-        model = KNeighborsClassifier(**param)
-        model.fit(self.X_train, self.y_train)
-
-        y_proba = model.predict_proba(self.X_val)[:, 1]
-
-        best_mcc = -1
-        for t in [0.3, 0.4, 0.5, 0.6]:
-            y_pred = (y_proba > t).astype(int)
-            mcc = matthews_corrcoef(self.y_val, y_pred)
-            if mcc > best_mcc:
-                best_mcc = mcc
-        return best_mcc
-
-    def model_train(self):
-        study_knn = optuna.create_study(direction="maximize")
-        study_knn.optimize(self.objective_knn, n_trials=25, n_jobs=2)
-
-        self.best_knn_params = study_knn.best_params.copy()
-
-        X_combined = pd.concat([self.X_train, self.X_val])
-        y_combined = pd.concat([self.y_train, self.y_val])
-
-        self.best_knn_model = KNeighborsClassifier(**self.best_knn_params)
-        self.best_knn_model.fit(X_combined, y_combined)
-
-        mlflow.log_params(self.best_knn_params)
-
-    def model_predict(self):
-        proba = self.best_knn_model.predict_proba(self.X_test)[:, 1]
-
-        best_f1, best_t = 0, 0.5
-        for t in [0.3, 0.4, 0.5, 0.6]:
-            y_pred = (proba > t).astype(int)
-            f1 = f1_score(self.y_test, y_pred, average="macro")
-            if f1 > best_f1:
-                best_f1, best_t = f1, t
-
-        y_pred = (proba > best_t).astype(int)
-
-        # --- Metrics & Reports ---
-        report_dict = classification_report(self.y_test, y_pred, output_dict=True)
-        report_text = classification_report(self.y_test, y_pred)
-
-        # MLflow Logging
-        mlflow.log_metric("f1_macro", best_f1)
-        mlflow.log_metric("accuracy", accuracy_score(self.y_test, y_pred))
-        mlflow.log_metric("mcc", matthews_corrcoef(self.y_test, y_pred))
-        mlflow.log_metric("best_threshold", best_t)
-        mlflow.log_metric("precision_macro", report_dict["macro avg"]["precision"])
-        mlflow.log_metric("recall_macro", report_dict["macro avg"]["recall"])
-        mlflow.sklearn.log_model(self.best_knn_model, "model")
-
-        # Save Report Artifact
-        report_filename = f"classification_report_{self.__class__.__name__}.txt"
-        with open(report_filename, "w") as f:
-            f.write(report_text)
-        mlflow.log_artifact(report_filename)
-
-        # Confusion Matrix Artifact
-        model_name = self.__class__.__name__
-        cm_filename = f"confusion_matrix_{model_name}.png"
-        plt.figure(figsize=(8, 6))
-        cm = confusion_matrix(self.y_test, y_pred)
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-        disp.plot(cmap="Greens")
-        plt.title(f"Confusion Matrix - {model_name}")
-        plt.savefig(cm_filename, bbox_inches="tight")
-        mlflow.log_artifact(cm_filename)
-        plt.close()
-
-        # --- Printing ---
-        print(f"\n{'=' * 20} {self.__class__.__name__} {'=' * 20}")
-        print(f"Best Threshold: {best_t}")
-        print(f"Test Accuracy: {accuracy_score(self.y_test, y_pred):.4f}")
-        print("\nClassification Report:\n", report_text)
-
-    def plot_learning_curve_for_smote(self):
-
-        model = KNeighborsClassifier(**self.best_knn_params)
-
-        train_percentages = np.linspace(0.1, 1.0, 10)
-        train_sizes, train_scores, val_scores = [], [], []
-
-        for p in train_percentages:
-            n_samples = int(p * len(self.X_train))
-            train_sizes.append(n_samples)
-
-            X_subset = self.X_train[:n_samples]
-            y_subset = self.y_train[:n_samples]
-
-            model.fit(X_subset, y_subset)
-
-            train_scores.append(
-                f1_score(y_subset, model.predict(X_subset), average="macro")
-            )
-            val_scores.append(
-                f1_score(self.y_val, model.predict(self.X_val), average="macro")
-            )
-
-        lc_filename = f"learning_curve_{self.__class__.__name__}.png"
-        plt.figure(figsize=(10, 6))
-        plt.plot(
-            train_sizes,
-            train_scores,
-            "o-",
-            color="#a427d6",
-            label="Train F1 (SMOTE Data)",
-        )
-        plt.plot(
-            train_sizes,
-            val_scores,
-            "o-",
-            color="#2ca02c",
-            label="Validation F1 (Original Data)",
-        )
-        plt.title(f"Learning Curve Analysis - {self.__class__.__name__}")
-        plt.xlabel("Samples")
-        plt.ylabel("F1 Score")
-        plt.legend()
-        plt.grid(True)
-        plt.savefig(lc_filename, bbox_inches="tight")
-        mlflow.log_artifact(lc_filename)
-        plt.close()
-
-
-class RFModel:
-    def __init__(self, X_train, y_train, X_val, y_val, X_test, y_test):
-        self.X_train = X_train
-        self.y_train = y_train
-        self.X_val = X_val
-        self.y_val = y_val
-        self.X_test = X_test
-        self.y_test = y_test
-        self.best_rf_model = None
-        self.best_rf_params = None
-
-    def objective_rf(self, trial):
-        param = {
-            "n_estimators": trial.suggest_int("n_estimators", 50, 300),
-            "criterion": trial.suggest_categorical("criterion", ["gini", "entropy"]),
-            "max_depth": trial.suggest_int("max_depth", 3, 10),
-            "min_samples_split": trial.suggest_int("min_samples_split", 2, 20),
-            "min_samples_leaf": trial.suggest_int("min_samples_leaf", 1, 20),
-        }
-
-        model = RandomForestClassifier(
-            **param, random_state=42, class_weight="balanced"
-        )
+        model = KNeighborsClassifier(**params)
         model.fit(self.X_train, self.y_train)
 
         proba = model.predict_proba(self.X_val)[:, 1]
 
-        best_mcc = -1
-        for t in [0.3, 0.4, 0.5, 0.6]:
-            y_pred = (proba > t).astype(int)
-            mcc = matthews_corrcoef(self.y_val, y_pred)
-            if mcc > best_mcc:
-                best_mcc = mcc
+        best_mcc, _ = self.find_best_threshold_mcc(proba, y_true=self.y_val)
 
         return best_mcc
 
     def model_train(self):
-        study_rf = optuna.create_study(direction="maximize")
-        study_rf.optimize(self.objective_rf, n_trials=30, n_jobs=2)
+        logger.info("Training KNN")
 
-        self.best_rf_params = study_rf.best_params.copy()
+        study = optuna.create_study(direction="maximize")
+        study.optimize(self.objective_knn, n_trials=40, n_jobs=2)
 
-        X_combined = pd.concat([self.X_train, self.X_val])
-        y_combined = pd.concat([self.y_train, self.y_val])
+        self.best_params = study.best_params.copy()
 
-        self.best_rf_model = RandomForestClassifier(
-            **self.best_rf_params, random_state=42, class_weight="balanced"
-        )
-        self.best_rf_model.fit(X_combined, y_combined)
+        self.model = KNeighborsClassifier(**self.best_params)
 
-        # MLflow Logging
-        mlflow.log_params(self.best_rf_params)
+        self.train_final_model()
+
+        # MLflow logging
+        mlflow.log_params(self.best_params)
+        mlflow.log_param("model_name", "knn")
+
+        self.cross_validate()
+
+        logger.success("Training done")
 
     def model_predict(self):
-        proba = self.best_rf_model.predict_proba(self.X_test)[:, 1]
+        logger.info("Predicting KNN")
 
-        best_f1, best_t = 0, 0.5
-        for t in [0.3, 0.4, 0.5, 0.6]:
-            y_pred = (proba > t).astype(int)
-            f1 = f1_score(self.y_test, y_pred, average="macro")
-            if f1 > best_f1:
-                best_f1, best_t = f1, t
+        proba = self.model.predict_proba(self.X_test)[:, 1]
 
-        y_pred = (proba > best_t).astype(int)
+        y_pred, cm, best_mcc, best_t = self.evaluate(proba)
 
-        # --- Metrics & Reports ---
-        report_dict = classification_report(self.y_test, y_pred, output_dict=True)
-        report_text = classification_report(self.y_test, y_pred)
+        self.log_classification_report(y_pred, model_name="knn")
+        self.log_error_analysis(y_pred, model_name="knn")
+        self.plot_confusion_matrix(cm, model_name="knn")
+        self.plot_roc(proba, model_name="knn")
+        self.plot_learning_curve(model_name="knn")
 
-        # MLflow Logging
-        mlflow.log_metric("f1_macro", best_f1)
-        mlflow.log_metric("accuracy", accuracy_score(self.y_test, y_pred))
-        mlflow.log_metric("mcc", matthews_corrcoef(self.y_test, y_pred))
-        mlflow.log_metric("best_threshold", best_t)
-        mlflow.log_metric("precision_macro", report_dict["macro avg"]["precision"])
-        mlflow.log_metric("recall_macro", report_dict["macro avg"]["recall"])
-        mlflow.sklearn.log_model(self.best_rf_model, "model")
+        self.log_and_register_model("knn")
 
-        # Save Report Artifact
-        report_filename = f"classification_report_{self.__class__.__name__}.txt"
-        with open(report_filename, "w") as f:
-            f.write(report_text)
-        mlflow.log_artifact(report_filename)
+        logger.success(f"Done | MCC={best_mcc:.4f} | T={best_t}")
 
-        # Confusion Matrix Artifact
-        model_name = self.__class__.__name__
-        cm_filename = f"confusion_matrix_{model_name}.png"
-        plt.figure(figsize=(8, 6))
-        cm = confusion_matrix(self.y_test, y_pred)
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-        disp.plot(cmap="Purples")
-        plt.title(f"Confusion Matrix - {model_name}")
-        plt.savefig(cm_filename, bbox_inches="tight")
-        mlflow.log_artifact(cm_filename)
-        plt.close()
 
-        # --- Printing ---
-        print(f"\n{'=' * 20} {self.__class__.__name__} {'=' * 20}")
-        print(f"Best Threshold: {best_t}")
-        print(f"Test Accuracy: {accuracy_score(self.y_test, y_pred):.4f}")
-        print("\nClassification Report:\n", report_text)
+class RFModel(BaseModel):
+    def __init__(self, X_train, y_train, X_val, y_val, X_test, y_test):
+        super().__init__(X_train, y_train, X_val, y_val, X_test, y_test)
+        self.best_rf_params = None
 
-    def plot_learning_curve_for_smote(self):
+    def objective_rf(self, trial):
+        params = {
+            "n_estimators": trial.suggest_int("n_estimators", 50, 300),
+            "criterion": trial.suggest_categorical("criterion", ["gini", "entropy"]),
+            "max_depth": trial.suggest_int("max_depth", 3, 10),
+            "min_samples_split": trial.suggest_int("min_samples_split", 15, 50),
+            "min_samples_leaf": trial.suggest_int("min_samples_leaf", 15, 50),
+        }
         model = RandomForestClassifier(
+            **params, random_state=42, class_weight="balanced"
+        )
+        model.fit(self.X_train, self.y_train)
+        proba = model.predict_proba(self.X_val)[:, 1]
+        best_mcc, _ = self.find_best_threshold_mcc(proba, y_true=self.y_val)
+        return best_mcc
+
+    def model_train(self):
+        logger.info("Training Random Forest")
+        study = optuna.create_study(direction="maximize")
+        study.optimize(self.objective_rf, n_trials=30, n_jobs=2)
+
+        self.best_rf_params = study.best_params.copy()
+        self.model = RandomForestClassifier(
             **self.best_rf_params, random_state=42, class_weight="balanced"
         )
+        self.best_params = self.best_rf_params
+        self.train_final_model()
 
-        train_percentages = np.linspace(0.1, 1.0, 10)
-        train_sizes, train_scores, val_scores = [], [], []
+        mlflow.log_params(self.best_rf_params)
+        mlflow.log_param("model_name", "random_forest")
+        self.cross_validate()
+        logger.success("Training done")
 
-        for p in train_percentages:
-            n_samples = int(p * len(self.X_train))
-            train_sizes.append(n_samples)
+    def model_predict(self):
+        logger.info("Predicting Random Forest")
+        proba = self.model.predict_proba(self.X_test)[:, 1]
+        y_pred, cm, best_mcc, best_t = self.evaluate(proba)
 
-            X_subset = self.X_train[:n_samples]
-            y_subset = self.y_train[:n_samples]
-
-            model.fit(X_subset, y_subset)
-
-            train_scores.append(
-                f1_score(y_subset, model.predict(X_subset), average="macro")
-            )
-            val_scores.append(
-                f1_score(self.y_val, model.predict(self.X_val), average="macro")
-            )
-
-        lc_filename = f"learning_curve_{self.__class__.__name__}.png"
-        plt.figure(figsize=(10, 6))
-        plt.plot(train_sizes, train_scores, "o-", color="#6a1b9a", label="Train F1")
-        plt.plot(train_sizes, val_scores, "o-", color="#1565c0", label="Validation F1")
-        plt.title(f"Learning Curve Analysis - {self.__class__.__name__}")
-        plt.xlabel("Number of Training Samples")
-        plt.ylabel("F1 Score (Macro)")
-        plt.legend()
-        plt.grid(True, linestyle="--", alpha=0.6)
-
-        plt.savefig(lc_filename, bbox_inches="tight")
-        mlflow.log_artifact(lc_filename)
-        plt.close()
+        self.log_classification_report(y_pred, model_name="rf")
+        self.log_error_analysis(y_pred, model_name="rf")
+        self.plot_confusion_matrix(cm, model_name="rf")
+        self.plot_roc(proba, model_name="rf")
+        self.plot_learning_curve(model_name="rf")
+        self.log_and_register_model("random_forest")
+        logger.success(f"Done | MCC={best_mcc:.4f} | T={best_t}")
 
 
-class SVMModel:
+class SVMModel(BaseModel):
     def __init__(self, X_train, y_train, X_val, y_val, X_test, y_test):
-        self.X_train = X_train
-        self.y_train = y_train
-        self.X_val = X_val
-        self.y_val = y_val
-        self.X_test = X_test
-        self.y_test = y_test
-        self.best_svm_model = None
-        self.best_svm_params = None
-        self.best_threshold = 0.5
+        super().__init__(X_train, y_train, X_val, y_val, X_test, y_test)
+        self.best_params = None
+        self.feature_map = None
 
     def clean_data(self, X):
+        X = X.replace([np.inf, -np.inf], np.nan)
+        X = X.fillna(X.median())
+        X = np.clip(X, -5, 5)
+        return X
 
-        X_clean = X.replace([np.inf, -np.inf], np.nan)
-        X_clean = X_clean.fillna(X_clean.median())
-        X_clean = X_clean.clip(-10, 10)
-        return X_clean
+    def transform(self, X, fit=False):
+        X = self.clean_data(X)
+        if fit:
+            return self.feature_map.fit_transform(X)
+        return self.feature_map.transform(X)
 
     def objective_svm(self, trial):
-        kernel = trial.suggest_categorical("kernel", ["rbf", "poly"])
-        param = {
-            "C": trial.suggest_float("C", 0.1, 20, log=True),
-            "kernel": kernel,
-            "gamma": trial.suggest_float("gamma", 1e-4, 1, log=True),
-            "max_iter": 4000,
-            "class_weight": "balanced",
-            "probability": True,
-            "random_state": 42,
+        params = {
+            "n_components": trial.suggest_int("n_components", 50, 120),
+            "gamma": trial.suggest_float("gamma", 1e-3, 0.05, log=True),
+            "C": trial.suggest_float("C", 0.05, 3.0, log=True),
         }
 
-        if kernel == "poly":
-            param["degree"] = trial.suggest_int("degree", 2, 3)
-            param["coef0"] = trial.suggest_float("coef0", 0, 1)
+        feature_map = Nystroem(
+            kernel="rbf",
+            gamma=params["gamma"],
+            n_components=params["n_components"],
+            random_state=42,
+        )
 
-        model = SVC(**param)
+        X_tr = feature_map.fit_transform(self.clean_data(self.X_train))
+        X_va = feature_map.transform(self.clean_data(self.X_val))
 
-        X_train_clean = self.clean_data(self.X_train)
-        X_val_clean = self.clean_data(self.X_val)
+        model = LinearSVC(
+            C=params["C"],
+            class_weight="balanced",
+            dual=False,
+            max_iter=2000,
+            random_state=42,
+        )
 
-        model.fit(X_train_clean, self.y_train)
-        proba = model.predict_proba(X_val_clean)[:, 1]
+        model.fit(X_tr, self.y_train)
 
-        best_mcc = -1
-        best_t = 0.5
-        for t in np.arange(0.2, 0.8, 0.1):
-            y_pred = (proba > t).astype(int)
-            mcc = matthews_corrcoef(self.y_val, y_pred)
-            if mcc > best_mcc:
-                best_mcc = mcc
-                best_t = t
+        scores = model.decision_function(X_va)
+        proba = (scores - scores.min()) / (scores.max() - scores.min() + 1e-7)
 
-        trial.set_user_attr("best_threshold", best_t)
+        best_mcc, _ = self.find_best_threshold_mcc(proba, self.y_val)
+
         return best_mcc
 
     def model_train(self):
+        logger.info("Training SVM")
+
         study = optuna.create_study(direction="maximize")
-        study.optimize(self.objective_svm, n_trials=3, n_jobs=1)
+        study.optimize(self.objective_svm, n_trials=60, n_jobs=1)
 
-        self.best_svm_params = study.best_params.copy()
-        self.best_threshold = study.best_trial.user_attrs["best_threshold"]
+        self.best_params = study.best_params.copy()
 
-        X_combined = pd.concat([self.X_train, self.X_val])
-        y_combined = pd.concat([self.y_train, self.y_val])
-
-        self.best_svm_model = SVC(
-            **self.best_svm_params,
-            class_weight="balanced",
-            probability=True,
+        self.feature_map = Nystroem(
+            kernel="rbf",
+            gamma=self.best_params["gamma"],
+            n_components=self.best_params["n_components"],
             random_state=42,
         )
 
-        self.best_svm_model.fit(self.clean_data(X_combined), y_combined)
-
-        # MLflow Logging
-        mlflow.log_params(self.best_svm_params)
-        mlflow.log_param("optimized_threshold", self.best_threshold)
-
-    def model_predict(self):
-        X_test_clean = self.clean_data(self.X_test)
-        proba = self.best_svm_model.predict_proba(X_test_clean)[:, 1]
-        y_pred = (proba > self.best_threshold).astype(int)
-
-        # --- Metrics & Reports ---
-        report_dict = classification_report(self.y_test, y_pred, output_dict=True)
-        report_text = classification_report(self.y_test, y_pred)
-
-        # MLflow Logging
-        mlflow.log_metric("f1_macro", report_dict["macro avg"]["f1-score"])
-        mlflow.log_metric("accuracy", accuracy_score(self.y_test, y_pred))
-        mlflow.log_metric("mcc", matthews_corrcoef(self.y_test, y_pred))
-        mlflow.log_metric("best_threshold", self.best_threshold)
-        mlflow.log_metric("precision_macro", report_dict["macro avg"]["precision"])
-        mlflow.log_metric("recall_macro", report_dict["macro avg"]["recall"])
-        mlflow.sklearn.log_model(self.best_svm_model, "model")
-
-        # Save Report Artifact
-        report_filename = f"classification_report_{self.__class__.__name__}.txt"
-        with open(report_filename, "w") as f:
-            f.write(report_text)
-        mlflow.log_artifact(report_filename)
-
-        # Confusion Matrix Artifact
-        model_name = self.__class__.__name__
-        cm_filename = f"confusion_matrix_{model_name}.png"
-        plt.figure(figsize=(8, 6))
-        cm = confusion_matrix(self.y_test, y_pred)
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-        disp.plot(cmap="Reds")
-        plt.title(f"Confusion Matrix - {model_name}")
-        plt.savefig(cm_filename, bbox_inches="tight")
-        mlflow.log_artifact(cm_filename)
-        plt.close()
-
-        # --- Printing ---
-        print(f"\n{'=' * 20} {self.__class__.__name__} {'=' * 20}")
-        print(f"Best Threshold: {self.best_threshold:.4f}")
-        print(f"Test Accuracy: {accuracy_score(self.y_test, y_pred):.4f}")
-        print("\nClassification Report:\n", report_text)
-
-    def plot_learning_curve_for_smote(self):
-
-        model = SVC(
-            **self.best_svm_params,
+        self.model = LinearSVC(
+            C=self.best_params["C"],
             class_weight="balanced",
-            probability=True,
+            dual=False,
+            max_iter=3000,
             random_state=42,
         )
 
-        train_percentages = np.linspace(0.1, 1.0, 8)
-        train_sizes, train_scores, val_scores = [], [], []
+        # combine data
+        X_comb = pd.concat([self.X_train, self.X_val])
+        y_comb = pd.concat([self.y_train, self.y_val])
+
+        X_comb_tr = self.transform(X_comb, fit=True)
+        self.model.fit(X_comb_tr, y_comb)
+
+        mlflow.log_params(self.best_params)
+        mlflow.log_param("model_name", "svm")
+
+        logger.success("Training done")
+
+    def plot_learning_curve(self, model_name="svm"):
+        pipe = Pipeline(
+            [
+                (
+                    "nystroem",
+                    Nystroem(
+                        kernel="rbf",
+                        gamma=self.best_params["gamma"],
+                        n_components=self.best_params["n_components"],
+                        random_state=42,
+                    ),
+                ),
+                (
+                    "svc",
+                    LinearSVC(
+                        C=self.best_params["C"],
+                        class_weight="balanced",
+                        dual=False,
+                        max_iter=3000,
+                        random_state=42,
+                    ),
+                ),
+            ]
+        )
 
         X_train_clean = self.clean_data(self.X_train)
-        X_val_clean = self.clean_data(self.X_val)
 
-        for p in train_percentages:
-            n_samples = int(p * len(X_train_clean))
-            train_sizes.append(n_samples)
+        train_sizes, train_scores, val_scores = learning_curve(
+            pipe,
+            X_train_clean,
+            self.y_train,
+            cv=5,
+            scoring="f1_macro",
+            train_sizes=np.linspace(0.1, 1.0, 8),
+            n_jobs=2,
+        )
 
-            X_subset = X_train_clean[:n_samples]
-            y_subset = self.y_train[:n_samples]
-
-            model.fit(X_subset, y_subset)
-
-            train_scores.append(
-                f1_score(y_subset, model.predict(X_subset), average="macro")
-            )
-            val_scores.append(
-                f1_score(self.y_val, model.predict(X_val_clean), average="macro")
-            )
-
-        lc_filename = f"learning_curve_{self.__class__.__name__}.png"
-        plt.figure(figsize=(10, 6))
-        plt.plot(train_sizes, train_scores, "o-", color="#d32f2f", label="Train F1")
-        plt.plot(train_sizes, val_scores, "o-", color="#1976d2", label="Validation F1")
-        plt.title(f"Learning Curve Analysis - {self.__class__.__name__}")
-        plt.xlabel("Training Samples")
-        plt.ylabel("F1 Score (Macro)")
+        plt.figure(figsize=(8, 5))
+        plt.plot(train_sizes, train_scores.mean(axis=1), "o-", label="Train F1")
+        plt.plot(train_sizes, val_scores.mean(axis=1), "o-", label="Validation F1")
+        plt.title(f"Learning Curve - {model_name}")
         plt.legend()
-        plt.grid(True, linestyle="--", alpha=0.6)
+        plt.grid()
 
-        plt.savefig(lc_filename, bbox_inches="tight")
-        mlflow.log_artifact(lc_filename)
+        filename = f"learning_curve_{model_name}.png"
+        plt.savefig(filename)
+        mlflow.log_artifact(filename)
         plt.close()
 
+    def model_predict(self):
+        logger.info("Predicting SVM")
 
-# class NaiveBayesModel:
-#     def __init__(self,X_train,y_train,X_val,y_val,X_test,y_test):
-#         self.X_train=X_train
-#         self.y_train=y_train
-#         self.X_val=X_val
-#         self.y_val=y_val
-#         self.X_test=X_test
-#         self.y_test=y_test
-#         self.best_nb_model=None
+        X_te = self.transform(self.X_test)
 
-#     def objective_nb(self,trial):
-#         var_smoothing = trial.suggest_float("var_smoothing", 1e-11, 1e-7, log=True)
+        scores = self.model.decision_function(X_te)
+        proba = (scores - scores.min()) / (scores.max() - scores.min() + 1e-7)
 
-#         model = GaussianNB(var_smoothing=var_smoothing)
-#         model.fit(self.X_train, self.y_train)
-#         y_val_pred = model.predict(self.X_val)
-#         return accuracy_score(self.y_val, y_val_pred)
+        y_pred, cm, best_mcc, best_t = self.evaluate(proba)
 
-#     def model_train(self):
-#         study_nb = optuna.create_study(direction="maximize")
-#         study_nb.optimize(self.objective_nb, n_trials=200, n_jobs=2)
+        self.log_classification_report(y_pred, model_name="svm")
+        self.log_error_analysis(y_pred, model_name="svm")
+        self.plot_confusion_matrix(cm, model_name="svm")
+        self.plot_roc(proba, model_name="svm")
+        self.plot_learning_curve(model_name="svm")
 
-#         best_nb_params = study_nb.best_params
-#         print("Best GaussianNB Parameters from Optuna:", best_nb_params)
+        self.log_and_register_model("svm")
 
-#         # ------------------------------
-#         # 2. TRAIN BEST NB ON FULL TRAIN + VALIDATION DATA
-#         # ------------------------------
-#         X_combined = pd.concat([self.X_train, self.X_val])
-#         y_combined = pd.concat([self.y_train, self.y_val])
-
-#         self.best_nb_model = GaussianNB(**best_nb_params)
-#         self.best_nb_model.fit(X_combined, y_combined)
+        logger.success(f"Done | MCC={best_mcc:.4f} | T={best_t}")
 
 
-#     def model_predict(self):
-#         y_test_pred = self.best_nb_model.predict(self.X_test)
-#         test_acc = accuracy_score(self.y_test, y_test_pred)
-#         print(f"\nTest Accuracy: {test_acc:.4f}")
-#         print("f1_score:\n", f1_score(self.y_test, y_test_pred,average="weighted"))
-#         print("Classification Report:\n", classification_report(self.y_test, y_test_pred))
-class XGBModel:
+class XGBModel(BaseModel):
     def __init__(self, X_train, y_train, X_val, y_val, X_test, y_test):
-        self.X_train = X_train
-        self.y_train = y_train
-        self.X_val = X_val
-        self.y_val = y_val
-        self.X_test = X_test
-        self.y_test = y_test
-        self.best_xgb_model = None
+        super().__init__(X_train, y_train, X_val, y_val, X_test, y_test)
         self.best_xgb_params = None
-        self.scale_pos_weight = 1
+        self.scale_pos_weight = (self.y_train == 0).sum() / (self.y_train == 1).sum()
 
     def objective_xgb(self, trial):
-        param = {
+        params = {
             "n_estimators": trial.suggest_int("n_estimators", 50, 500),
-            "max_depth": trial.suggest_int("max_depth", 3, 10),
-            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3),
-            "subsample": trial.suggest_float("subsample", 0.5, 1.0),
-            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
-            "gamma": trial.suggest_float("gamma", 0, 1),
-            "reg_alpha": trial.suggest_float("reg_alpha", 0, 1),
-            "reg_lambda": trial.suggest_float("reg_lambda", 0, 1),
+            "max_depth": trial.suggest_int("max_depth", 3, 8),
+            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.1),
+            "subsample": trial.suggest_float("subsample", 0.6, 1.0),
+            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
+            "gamma": trial.suggest_float("gamma", 0.5, 5),
+            "reg_alpha": trial.suggest_float("reg_alpha", 0.1, 1),
+            "reg_lambda": trial.suggest_float("reg_lambda", 0, 10),
             "scale_pos_weight": self.scale_pos_weight,
             "eval_metric": "logloss",
             "random_state": 42,
         }
-
-        model = XGBClassifier(**param)
+        model = XGBClassifier(**params)
         model.fit(self.X_train, self.y_train)
-
         proba = model.predict_proba(self.X_val)[:, 1]
-
-        best_mcc = -1
-        for t in [0.3, 0.4, 0.5, 0.6]:
-            y_pred = (proba > t).astype(int)
-            mcc = matthews_corrcoef(self.y_val, y_pred)
-            if mcc > best_mcc:
-                best_mcc = mcc
-
+        best_mcc, _ = self.find_best_threshold_mcc(proba, y_true=self.y_val)
         return best_mcc
 
     def model_train(self):
-        study_xgb = optuna.create_study(direction="maximize")
-        study_xgb.optimize(self.objective_xgb, n_trials=200, n_jobs=2)
+        logger.info("Training XGBoost")
+        study = optuna.create_study(direction="maximize")
+        study.optimize(self.objective_xgb, n_trials=200, n_jobs=2)
 
-        self.best_xgb_params = study_xgb.best_params.copy()
-
-        X_combined = pd.concat([self.X_train, self.X_val])
-        y_combined = pd.concat([self.y_train, self.y_val])
-
-        self.best_xgb_model = XGBClassifier(
+        self.best_xgb_params = study.best_params.copy()
+        self.model = XGBClassifier(
             **self.best_xgb_params,
             scale_pos_weight=self.scale_pos_weight,
             eval_metric="logloss",
             random_state=42,
         )
+        self.best_params = self.best_xgb_params
+        self.train_final_model()
 
-        self.best_xgb_model.fit(X_combined, y_combined)
-
-        # MLflow Logging
         mlflow.log_params(self.best_xgb_params)
+        mlflow.log_param("model_name", "xgboost")
+        mlflow.log_param("scale_pos_weight", self.scale_pos_weight)
+        self.cross_validate()
+        logger.success("Training done")
 
     def model_predict(self):
-        proba = self.best_xgb_model.predict_proba(self.X_test)[
-            :, 1
-        ]  # عدلي اسم الموديل حسب الكلاس
-        best_f1, best_t = 0, 0.5
-        for t in [0.3, 0.4, 0.5, 0.6]:
-            y_pred = (proba > t).astype(int)
-            f1 = f1_score(self.y_test, y_pred, average="macro")
-            if f1 > best_f1:
-                best_f1, best_t = f1, t
+        logger.info("Predicting XGBoost")
+        proba = self.model.predict_proba(self.X_test)[:, 1]
+        y_pred, cm, best_mcc, best_t = self.evaluate(proba)
 
-            y_pred = (proba > best_t).astype(int)
-
-            report_dict = classification_report(self.y_test, y_pred, output_dict=True)
-            report_text = classification_report(self.y_test, y_pred)
-            mlflow.log_metric("f1_macro", best_f1)
-            mlflow.log_metric("accuracy", accuracy_score(self.y_test, y_pred))
-            mlflow.log_metric("mcc", matthews_corrcoef(self.y_test, y_pred))
-            mlflow.log_metric("best_threshold", best_t)
-            mlflow.sklearn.log_model(self.best_xgb_model, "model")
-            mlflow.log_metric("precision_macro", report_dict["macro avg"]["precision"])
-            mlflow.log_metric("recall_macro", report_dict["macro avg"]["recall"])
-
-            report_filename = f"classification_report_{self.__class__.__name__}.txt"
-            with open(report_filename, "w") as f:
-                f.write(report_text)
-            mlflow.log_artifact(report_filename)
-
-            # --- Printing ---
-            print(f"\n{'=' * 20} {self.__class__.__name__} {'=' * 20}")
-            print(f"Best Threshold: {best_t}")
-            print(f"Test Accuracy: {accuracy_score(self.y_test, y_pred):.4f}")
-            print("\nClassification Report:\n", report_text)
-
-        # Confusion Matrix Artifact
-        model_name = self.__class__.__name__
-        cm_filename = f"confusion_matrix_{model_name}.png"
-
-        plt.figure(figsize=(8, 6))
-        cm = confusion_matrix(self.y_test, y_pred)
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-        disp.plot(cmap="Oranges")
-        plt.title(f"Confusion Matrix - {model_name}")
-        plt.savefig(cm_filename, bbox_inches="tight")
-        mlflow.log_artifact(cm_filename)
-        plt.close()
-
-        # print(f"Best Threshold: {best_t}")
-        # print(f"Test Accuracy: {accuracy_score(self.y_test, y_pred):.4f}")
-        # print("Classification Report:\n", classification_report(self.y_test, y_pred))
-
-    def plot_learning_curve_for_smote(self):
-        model = XGBClassifier(
-            **self.best_xgb_params,
-            scale_pos_weight=self.scale_pos_weight,
-            eval_metric="logloss",
-            random_state=42,
-        )
-
-        train_percentages = np.linspace(0.1, 1.0, 10)
-        train_sizes, train_scores, val_scores = [], [], []
-
-        for p in train_percentages:
-            n_samples = int(p * len(self.X_train))
-            train_sizes.append(n_samples)
-
-            X_subset = self.X_train[:n_samples]
-            y_subset = self.y_train[:n_samples]
-
-            model.fit(X_subset, y_subset)
-
-            train_scores.append(
-                f1_score(y_subset, model.predict(X_subset), average="macro")
-            )
-            val_scores.append(
-                f1_score(self.y_val, model.predict(self.X_val), average="macro")
-            )
-
-        lc_filename = f"learning_curve_{self.__class__.__name__}.png"
-        plt.figure(figsize=(10, 6))
-        plt.plot(train_sizes, train_scores, "o-", color="#e65100", label="Train F1")
-        plt.plot(train_sizes, val_scores, "o-", color="#0277bd", label="Validation F1")
-        plt.title(f"Learning Curve Analysis - {self.__class__.__name__}")
-        plt.xlabel("Training Samples")
-        plt.ylabel("F1 Score (Macro)")
-        plt.legend()
-        plt.grid(True, linestyle="--", alpha=0.6)
-
-        plt.savefig(lc_filename, bbox_inches="tight")
-        mlflow.log_artifact(lc_filename)
-        plt.close()
+        self.log_classification_report(y_pred, model_name="xgb")
+        self.log_error_analysis(y_pred, model_name="xgb")
+        self.plot_confusion_matrix(cm, model_name="xgb")
+        self.plot_roc(proba, model_name="xgb")
+        self.plot_learning_curve(model_name="xgb")
+        self.log_and_register_model("xgboost")
+        logger.success(f"Done | MCC={best_mcc:.4f} | T={best_t}")
 
 
-class ExtraTreesModel:
+class ExtraTreesModel(BaseModel):
     def __init__(self, X_train, y_train, X_val, y_val, X_test, y_test):
-        self.X_train = X_train
-        self.y_train = y_train
-        self.X_val = X_val
-        self.y_val = y_val
-        self.X_test = X_test
-        self.y_test = y_test
-        self.best_params = None
-        self.best_model = None
+        super().__init__(X_train, y_train, X_val, y_val, X_test, y_test)
 
     def objective_et(self, trial):
         param = {
-            "n_estimators": trial.suggest_int("n_estimators", 100, 400),
-            "max_depth": trial.suggest_int("max_depth", 5, 15),
-            "min_samples_split": trial.suggest_int("min_samples_split", 20, 50),
-            "min_samples_leaf": trial.suggest_int("min_samples_leaf", 20, 50),
+            "n_estimators": trial.suggest_int("n_estimators", 50, 400),
+            "max_depth": trial.suggest_int("max_depth", 3, 10),
+            "min_samples_split": trial.suggest_int("min_samples_split", 20, 150),
+            "min_samples_leaf": trial.suggest_int("min_samples_leaf", 20, 150),
         }
-
         model = ExtraTreesClassifier(**param, random_state=42, class_weight="balanced")
         model.fit(self.X_train, self.y_train)
-
         proba = model.predict_proba(self.X_val)[:, 1]
-
-        best_mcc = -1
-        for t in [0.3, 0.4, 0.5, 0.6]:
-            y_pred = (proba > t).astype(int)
-            mcc = matthews_corrcoef(self.y_val, y_pred)
-            if mcc > best_mcc:
-                best_mcc = mcc
-
+        best_mcc, _ = self.find_best_threshold_mcc(proba, y_true=self.y_val)
         return best_mcc
 
     def model_train(self):
+        logger.info("Training ExtraTrees")
         study = optuna.create_study(direction="maximize")
         study.optimize(self.objective_et, n_trials=130, n_jobs=2)
 
         self.best_params = study.best_params.copy()
-
-        X_combined = pd.concat([self.X_train, self.X_val])
-        y_combined = pd.concat([self.y_train, self.y_val])
-
-        self.best_model = ExtraTreesClassifier(
+        self.model = ExtraTreesClassifier(
             **self.best_params, random_state=42, class_weight="balanced"
         )
+        self.train_final_model()
 
-        self.best_model.fit(X_combined, y_combined)
-
-        # MLflow Logging
         mlflow.log_params(self.best_params)
+        mlflow.log_param("model_name", "extra_trees")
+        self.cross_validate()
+        logger.success("Training done")
 
     def model_predict(self):
-        proba = self.best_model.predict_proba(self.X_test)[:, 1]
+        logger.info("Predicting ExtraTrees")
+        proba = self.model.predict_proba(self.X_test)[:, 1]
+        y_pred, cm, best_mcc, best_t = self.evaluate(proba)
 
-        best_f1, best_t = 0, 0.5
-        for t in [0.3, 0.4, 0.5, 0.6]:
-            y_pred = (proba > t).astype(int)
-            f1 = f1_score(self.y_test, y_pred, average="macro")
-            if f1 > best_f1:
-                best_f1, best_t = f1, t
-
-        y_pred = (proba > best_t).astype(int)
-
-        # --- Metrics & Reports ---
-        report_dict = classification_report(self.y_test, y_pred, output_dict=True)
-        report_text = classification_report(self.y_test, y_pred)
-
-        # MLflow Logging
-        mlflow.log_metric("f1_macro", best_f1)
-        mlflow.log_metric("accuracy", accuracy_score(self.y_test, y_pred))
-        mlflow.log_metric("mcc", matthews_corrcoef(self.y_test, y_pred))
-        mlflow.log_metric("best_threshold", best_t)
-        mlflow.log_metric("precision_macro", report_dict["macro avg"]["precision"])
-        mlflow.log_metric("recall_macro", report_dict["macro avg"]["recall"])
-        mlflow.sklearn.log_model(self.best_model, "model")
-
-        # Save Report Artifact
-        report_filename = f"classification_report_{self.__class__.__name__}.txt"
-        with open(report_filename, "w") as f:
-            f.write(report_text)
-        mlflow.log_artifact(report_filename)
-
-        # Confusion Matrix Artifact
-        model_name = self.__class__.__name__
-        cm_filename = f"confusion_matrix_{model_name}.png"
-        plt.figure(figsize=(8, 6))
-        cm = confusion_matrix(self.y_test, y_pred)
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-        disp.plot(cmap="Greens")
-        plt.title(f"Confusion Matrix - {model_name}")
-        plt.savefig(cm_filename, bbox_inches="tight")
-        mlflow.log_artifact(cm_filename)
-        plt.close()
-
-        # --- Printing ---
-        print(f"\n{'=' * 20} {self.__class__.__name__} {'=' * 20}")
-        print(f"Best Threshold: {best_t}")
-        print(f"Test Accuracy: {accuracy_score(self.y_test, y_pred):.4f}")
-        print("\nClassification Report:\n", report_text)
-
-    def plot_learning_curve_for_smote(self):
-        model = ExtraTreesClassifier(
-            **self.best_params, random_state=42, class_weight="balanced"
-        )
-
-        train_percentages = np.linspace(0.1, 1.0, 10)
-        train_sizes, train_scores, val_scores = [], [], []
-
-        for p in train_percentages:
-            n_samples = int(p * len(self.X_train))
-            train_sizes.append(n_samples)
-
-            X_subset = self.X_train[:n_samples]
-            y_subset = self.y_train[:n_samples]
-
-            model.fit(X_subset, y_subset)
-
-            train_scores.append(
-                f1_score(y_subset, model.predict(X_subset), average="macro")
-            )
-            val_scores.append(
-                f1_score(self.y_val, model.predict(self.X_val), average="macro")
-            )
-
-        lc_filename = f"learning_curve_{self.__class__.__name__}.png"
-        plt.figure(figsize=(10, 6))
-        plt.plot(train_sizes, train_scores, "o-", color="#2e7d32", label="Train F1")
-        plt.plot(train_sizes, val_scores, "o-", color="#1565c0", label="Validation F1")
-        plt.title(f"Learning Curve Analysis - {self.__class__.__name__}")
-        plt.xlabel("Training Samples")
-        plt.ylabel("F1 Score (Macro)")
-        plt.legend()
-        plt.grid(True, linestyle="--", alpha=0.6)
-
-        plt.savefig(lc_filename, bbox_inches="tight")
-        mlflow.log_artifact(lc_filename)
-        plt.close()
+        self.log_classification_report(y_pred, model_name="et")
+        self.log_error_analysis(y_pred, model_name="et")
+        self.plot_confusion_matrix(cm, model_name="et")
+        self.plot_roc(proba, model_name="et")
+        self.plot_learning_curve(model_name="et")
+        self.log_and_register_model("extra_trees")
+        logger.success(f"Done | MCC={best_mcc:.4f} | T={best_t}")
 
 
-class CatBoostModel:
+class CatBoostModel(BaseModel):
     def __init__(self, X_train, y_train, X_val, y_val, X_test, y_test):
-        self.X_train = X_train
-        self.y_train = y_train
-        self.X_val = X_val
-        self.y_val = y_val
-        self.X_test = X_test
-        self.y_test = y_test
+        super().__init__(X_train, y_train, X_val, y_val, X_test, y_test)
         self.best_params = None
-        self.model = None
 
     def objective_cat(self, trial):
-        param = {
+        params = {
             "iterations": trial.suggest_int("iterations", 200, 600),
-            "depth": trial.suggest_int("depth", 4, 10),
-            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3),
-            "l2_leaf_reg": trial.suggest_float("l2_leaf_reg", 1, 10),
+            "depth": trial.suggest_int("depth", 4, 8),
+            "learning_rate": trial.suggest_float("learning_rate", 0.001, 0.1),
+            "l2_leaf_reg": trial.suggest_float("l2_leaf_reg", 3, 20),
             "auto_class_weights": "Balanced",
             "verbose": 0,
             "random_seed": 42,
         }
 
-        model = CatBoostClassifier(**param)
+        model = CatBoostClassifier(**params)
         model.fit(self.X_train, self.y_train)
 
         proba = model.predict_proba(self.X_val)[:, 1]
 
-        best_mcc = -1
-        for t in [0.3, 0.4, 0.5, 0.6]:
-            y_pred = (proba > t).astype(int)
-            mcc = matthews_corrcoef(self.y_val, y_pred)
-            if mcc > best_mcc:
-                best_mcc = mcc
+        best_mcc, _ = self.find_best_threshold_mcc(proba, y_true=self.y_val)
 
         return best_mcc
 
     def model_train(self):
+        logger.info("Training CatBoost")
+
         study = optuna.create_study(direction="maximize")
-        study.optimize(self.objective_cat, n_trials=30, n_jobs=2)
+        study.optimize(self.objective_cat, n_trials=100, n_jobs=2)
 
         self.best_params = study.best_params.copy()
 
-        X_combined = pd.concat([self.X_train, self.X_val])
-        y_combined = pd.concat([self.y_train, self.y_val])
-
         self.model = CatBoostClassifier(
-            **self.best_params, auto_class_weights="Balanced", verbose=0, random_seed=42
+            **self.best_params,
+            auto_class_weights="Balanced",
+            verbose=0,
+            random_seed=42,
         )
 
-        self.model.fit(X_combined, y_combined)
+        self.train_final_model()
 
-        # MLflow Logging
+        # MLflow logging
         mlflow.log_params(self.best_params)
+        mlflow.log_param("model_name", "catboost")
+
+        self.cross_validate()
+
+        logger.success("Training done")
 
     def model_predict(self):
+        logger.info("Predicting CatBoost")
         proba = self.model.predict_proba(self.X_test)[:, 1]
-
-        best_f1, best_t = 0, 0.5
-        for t in [0.3, 0.4, 0.5, 0.6]:
-            y_pred = (proba > t).astype(int)
-            f1 = f1_score(self.y_test, y_pred, average="macro")
-            if f1 > best_f1:
-                best_f1, best_t = f1, t
-
-        y_pred = (proba > best_t).astype(int)
-
-        # --- Metrics & Reports ---
-        report_dict = classification_report(self.y_test, y_pred, output_dict=True)
-        report_text = classification_report(self.y_test, y_pred)
-
-        # MLflow Logging
-        mlflow.log_metric("f1_macro", best_f1)
-        mlflow.log_metric("accuracy", accuracy_score(self.y_test, y_pred))
-        mlflow.log_metric("mcc", matthews_corrcoef(self.y_test, y_pred))
-        mlflow.log_metric("best_threshold", best_t)
-        mlflow.log_metric("precision_macro", report_dict["macro avg"]["precision"])
-        mlflow.log_metric("recall_macro", report_dict["macro avg"]["recall"])
-
-        mlflow.sklearn.log_model(self.model, "model")
-
-        # Save Report Artifact
-        report_filename = f"classification_report_{self.__class__.__name__}.txt"
-        with open(report_filename, "w") as f:
-            f.write(report_text)
-        mlflow.log_artifact(report_filename)
-
-        # Confusion Matrix Artifact
-        model_name = self.__class__.__name__
-        cm_filename = f"confusion_matrix_{model_name}.png"
-        plt.figure(figsize=(8, 6))
-        cm = confusion_matrix(self.y_test, y_pred)
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-        disp.plot(cmap="YlGnBu")  # لون مختلف (أصفر-أخضر-أزرق) لتمييز CatBoost
-        plt.title(f"Confusion Matrix - {model_name}")
-        plt.savefig(cm_filename, bbox_inches="tight")
-        mlflow.log_artifact(cm_filename)
-        plt.close()
-
-        # --- Printing ---
-        print(f"\n{'=' * 20} {self.__class__.__name__} {'=' * 20}")
-        print(f"Best Threshold: {best_t}")
-        print(f"Test Accuracy: {accuracy_score(self.y_test, y_pred):.4f}")
-        print("\nClassification Report:\n", report_text)
-
-    def plot_learning_curve_for_smote(self):
-        # نستخدم نفس البارامترات مع وضع verbose=0 لمنع الزحمة في الـ console
-        model = CatBoostClassifier(
-            **self.best_params, auto_class_weights="Balanced", verbose=0, random_seed=42
-        )
-
-        train_percentages = np.linspace(0.1, 1.0, 10)
-        train_sizes, train_scores, val_scores = [], [], []
-
-        for p in train_percentages:
-            n_samples = int(p * len(self.X_train))
-            train_sizes.append(n_samples)
-
-            X_subset = self.X_train[:n_samples]
-            y_subset = self.y_train[:n_samples]
-
-            model.fit(X_subset, y_subset)
-
-            train_scores.append(
-                f1_score(y_subset, model.predict(X_subset), average="macro")
-            )
-            val_scores.append(
-                f1_score(self.y_val, model.predict(self.X_val), average="macro")
-            )
-
-        lc_filename = f"learning_curve_{self.__class__.__name__}.png"
-        plt.figure(figsize=(10, 6))
-        plt.plot(
-            train_sizes, train_scores, "o-", color="#fbc02d", label="Train F1"
-        )  # أصفر
-        plt.plot(
-            train_sizes, val_scores, "o-", color="#0097a7", label="Validation F1"
-        )  # سيان
-        plt.title(f"Learning Curve Analysis - {self.__class__.__name__}")
-        plt.xlabel("Training Samples")
-        plt.ylabel("F1 Score (Macro)")
-        plt.legend()
-        plt.grid(True, linestyle="--", alpha=0.6)
-
-        plt.savefig(lc_filename, bbox_inches="tight")
-        mlflow.log_artifact(lc_filename)
-        plt.close()
+        y_pred, cm, best_mcc, best_t = self.evaluate(proba)
+        self.log_classification_report(y_pred, model_name="catboost")
+        self.log_error_analysis(y_pred, model_name="catboost")
+        self.plot_confusion_matrix(cm, model_name="catboost")
+        self.plot_roc(proba, model_name="catboost")
+        self.plot_learning_curve(model_name="catboost")
+        self.log_and_register_model("catboost")
+        logger.success(f"Done | MCC={best_mcc:.4f} | T={best_t}")
 
 
-class LGBMModel:
+class LGBMModel(BaseModel):
     def __init__(self, X_train, y_train, X_val, y_val, X_test, y_test):
-        self.X_train = X_train
-        self.y_train = y_train
-        self.X_val = X_val
-        self.y_val = y_val
-        self.X_test = X_test
-        self.y_test = y_test
-        self.best_params = None
-        self.model = None
+        super().__init__(X_train, y_train, X_val, y_val, X_test, y_test)
+        self.scale_pos_weight = (self.y_train == 0).sum() / (self.y_train == 1).sum()
         self.scale_pos_weight = 1
 
     def objective_lgbm(self, trial):
         param = {
             "n_estimators": trial.suggest_int("n_estimators", 100, 500),
-            "max_depth": trial.suggest_int("max_depth", -1, 15),
-            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3),
+            "max_depth": trial.suggest_int("max_depth", 3, 10),
+            "learning_rate": trial.suggest_float("learning_rate", 0.001, 0.3),
             "num_leaves": trial.suggest_int("num_leaves", 20, 150),
             "subsample": trial.suggest_float("subsample", 0.5, 1.0),
             "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
@@ -1189,343 +705,166 @@ class LGBMModel:
             "verbosity": -1,
             "random_state": 42,
         }
-
         model = LGBMClassifier(**param)
         model.fit(self.X_train, self.y_train)
-
         proba = model.predict_proba(self.X_val)[:, 1]
-
-        best_mcc = -1
-        for t in [0.3, 0.4, 0.5, 0.6]:
-            y_pred = (proba > t).astype(int)
-            mcc = matthews_corrcoef(self.y_val, y_pred)
-            if mcc > best_mcc:
-                best_mcc = mcc
-
+        best_mcc, _ = self.find_best_threshold_mcc(proba, y_true=self.y_val)
         return best_mcc
 
     def model_train(self):
+        logger.info("Training LightGBM")
         study = optuna.create_study(direction="maximize")
         study.optimize(self.objective_lgbm, n_trials=150, n_jobs=2)
 
         self.best_params = study.best_params.copy()
+        self.model = LGBMClassifier(
+            **self.best_params,
+            scale_pos_weight=self.scale_pos_weight,
+            verbosity=-1,
+            random_state=42,
+        )
+        self.train_final_model()
 
-        self.best_params["scale_pos_weight"] = self.scale_pos_weight
-
-        X_combined = pd.concat([self.X_train, self.X_val])
-        y_combined = pd.concat([self.y_train, self.y_val])
-
-        self.model = LGBMClassifier(**self.best_params, verbosity=-1, random_state=42)
-        self.model.fit(X_combined, y_combined)
-
-        # MLflow Logging
         mlflow.log_params(self.best_params)
+        mlflow.log_param("model_name", "lightgbm")
+        mlflow.log_param("scale_pos_weight", self.scale_pos_weight)
+        self.cross_validate()
+        logger.success("Training done")
 
     def model_predict(self):
+        logger.info("Predicting LightGBM")
         proba = self.model.predict_proba(self.X_test)[:, 1]
-
-        best_f1, best_t = 0, 0.5
-        for t in [0.3, 0.4, 0.5, 0.6]:
-            y_pred = (proba > t).astype(int)
-            f1 = f1_score(self.y_test, y_pred, average="macro")
-            if f1 > best_f1:
-                best_f1, best_t = f1, t
-
-        y_pred = (proba > best_t).astype(int)
-
-        # --- Metrics & Reports ---
-        report_dict = classification_report(self.y_test, y_pred, output_dict=True)
-        report_text = classification_report(self.y_test, y_pred)
-
-        # MLflow Logging
-        mlflow.log_metric("f1_macro", best_f1)
-        mlflow.log_metric("accuracy", accuracy_score(self.y_test, y_pred))
-        mlflow.log_metric("mcc", matthews_corrcoef(self.y_test, y_pred))
-        mlflow.log_metric("best_threshold", best_t)
-        mlflow.log_metric("precision_macro", report_dict["macro avg"]["precision"])
-        mlflow.log_metric("recall_macro", report_dict["macro avg"]["recall"])
-        mlflow.lightgbm.log_model(self.model, "model")
-
-        # Save Report Artifact
-        report_filename = f"classification_report_{self.__class__.__name__}.txt"
-        with open(report_filename, "w") as f:
-            f.write(report_text)
-        mlflow.log_artifact(report_filename)
-
-        # Confusion Matrix Artifact
-        model_name = self.__class__.__name__
-        cm_filename = f"confusion_matrix_{model_name}.png"
-        plt.figure(figsize=(8, 6))
-        cm = confusion_matrix(self.y_test, y_pred)
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-        disp.plot(cmap="Blues")
-        plt.title(f"Confusion Matrix - {model_name}")
-        plt.savefig(cm_filename, bbox_inches="tight")
-        mlflow.log_artifact(cm_filename)
-        plt.close()
-
-        # --- Printing ---
-        print(f"\n{'=' * 20} {self.__class__.__name__} {'=' * 20}")
-        print(f"Best Threshold: {best_t}")
-        print(f"Test Accuracy: {accuracy_score(self.y_test, y_pred):.4f}")
-        print("\nClassification Report:\n", report_text)
-
-    def plot_learning_curve_for_smote(self):
-        model = LGBMClassifier(**self.best_params, verbosity=-1, random_state=42)
-
-        train_percentages = np.linspace(0.1, 1.0, 10)
-        train_sizes, train_scores, val_scores = [], [], []
-
-        for p in train_percentages:
-            n_samples = int(p * len(self.X_train))
-            train_sizes.append(n_samples)
-
-            X_subset = self.X_train[:n_samples]
-            y_subset = self.y_train[:n_samples]
-
-            model.fit(X_subset, y_subset)
-
-            train_scores.append(
-                f1_score(y_subset, model.predict(X_subset), average="macro")
-            )
-            val_scores.append(
-                f1_score(self.y_val, model.predict(self.X_val), average="macro")
-            )
-
-        lc_filename = f"learning_curve_{self.__class__.__name__}.png"
-        plt.figure(figsize=(10, 6))
-        plt.plot(train_sizes, train_scores, "o-", color="#1976d2", label="Train F1")
-        plt.plot(train_sizes, val_scores, "o-", color="#d32f2f", label="Validation F1")
-        plt.title(f"Learning Curve Analysis - {self.__class__.__name__}")
-        plt.xlabel("Training Samples")
-        plt.ylabel("F1 Score (Macro)")
-        plt.legend()
-        plt.grid(True, linestyle="--", alpha=0.6)
-
-        plt.savefig(lc_filename, bbox_inches="tight")
-        mlflow.log_artifact(lc_filename)
-        plt.close()
+        y_pred, cm, best_mcc, best_t = self.evaluate(proba)
+        self.log_classification_report(y_pred, model_name="lgbm")
+        self.log_error_analysis(y_pred, model_name="lgbm")
+        self.plot_confusion_matrix(cm, model_name="lgbm")
+        self.plot_roc(proba, model_name="lgbm")
+        self.plot_learning_curve(model_name="lgbm")
+        self.log_and_register_model("lightgbm")
+        logger.success(f"Done | MCC={best_mcc:.4f} | T={best_t}")
 
 
-class AdaBoostModel:
+class AdaBoostModel(BaseModel):
     def __init__(self, X_train, y_train, X_val, y_val, X_test, y_test):
-        self.X_train = X_train
-        self.y_train = y_train
-        self.X_val = X_val
-        self.y_val = y_val
-        self.X_test = X_test
-        self.y_test = y_test
+        super().__init__(X_train, y_train, X_val, y_val, X_test, y_test)
         self.best_params = None
-        self.model = None
 
     def objective_ada(self, trial):
-
-        param = {
-            "n_estimators": trial.suggest_int("n_estimators", 50, 300),
-            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.5),
-            # "algorithm": trial.suggest_categorical("algorithm", ["SAMME", "SAMME.R"]),
+        params = {
+            "n_estimators": trial.suggest_int("n_estimators", 50, 150),
+            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.2),
             "random_state": 42,
         }
 
-        model = AdaBoostClassifier(**param)
+        model = AdaBoostClassifier(**params)
         model.fit(self.X_train, self.y_train)
 
         proba = model.predict_proba(self.X_val)[:, 1]
-        best_mcc = -1
-        for t in [0.3, 0.4, 0.5, 0.6]:
-            y_pred = (proba > t).astype(int)
-            mcc = matthews_corrcoef(self.y_val, y_pred)
-            if mcc > best_mcc:
-                best_mcc = mcc
+
+        best_mcc, _ = self.find_best_threshold_mcc(proba, y_true=self.y_val)
+
         return best_mcc
 
     def model_train(self):
+        logger.info("Training AdaBoost")
+
         study = optuna.create_study(direction="maximize")
-        study.optimize(self.objective_ada, n_trials=30, n_jobs=2)
+        study.optimize(self.objective_ada, n_trials=80, n_jobs=2)
 
         self.best_params = study.best_params.copy()
-        X_combined = pd.concat([self.X_train, self.X_val])
-        y_combined = pd.concat([self.y_train, self.y_val])
 
-        self.model = AdaBoostClassifier(**self.best_params, random_state=42)
-        self.model.fit(X_combined, y_combined)
+        self.model = AdaBoostClassifier(
+            estimator=DecisionTreeClassifier(max_depth=1, class_weight="balanced")
+        )
+
+        self.train_final_model()
+
+        # MLflow logging
         mlflow.log_params(self.best_params)
+        mlflow.log_param("model_name", "adaboost")
+
+        self.cross_validate()
+
+        logger.success("Training done")
 
     def model_predict(self):
+        logger.info("Predicting AdaBoost")
+
         proba = self.model.predict_proba(self.X_test)[:, 1]
-        best_f1, best_t = 0, 0.5
-        for t in [0.3, 0.4, 0.5, 0.6]:
-            y_pred = (proba > t).astype(int)
-            f1 = f1_score(self.y_test, y_pred, average="macro")
-            if f1 > best_f1:
-                best_f1, best_t = f1, t
 
-        y_pred = (proba > best_t).astype(int)
-        # report_dict = classification_report(self.y_test, y_pred, output_dict=True)
-        report_text = classification_report(self.y_test, y_pred)
+        y_pred, cm, best_mcc, best_t = self.evaluate(proba)
 
-        mlflow.log_metric("f1_macro", best_f1)
-        mlflow.log_metric("mcc", matthews_corrcoef(self.y_test, y_pred))
-        mlflow.log_metric("best_threshold", best_t)
-        mlflow.sklearn.log_model(self.model, "model")
+        self.log_classification_report(y_pred, model_name="adaboost")
+        self.log_error_analysis(y_pred, model_name="adaboost")
+        self.plot_confusion_matrix(cm, model_name="adaboost")
+        self.plot_roc(proba, model_name="adaboost")
+        self.plot_learning_curve(model_name="adaboost")
 
-        # Artifacts
-        report_filename = f"classification_report_{self.__class__.__name__}.txt"
-        with open(report_filename, "w") as f:
-            f.write(report_text)
-        mlflow.log_artifact(report_filename)
+        self.log_and_register_model("adaboost")
 
-        cm_filename = f"confusion_matrix_{self.__class__.__name__}.png"
-        plt.figure(figsize=(8, 6))
-        cm = confusion_matrix(self.y_test, y_pred)
-        ConfusionMatrixDisplay(confusion_matrix=cm).plot(cmap="Reds")
-        plt.title(f"Confusion Matrix - {self.__class__.__name__}")
-        plt.savefig(cm_filename)
-        mlflow.log_artifact(cm_filename)
-        plt.close()
-
-        print(f"\n{'=' * 20} AdaBoost {'=' * 20}")
-        print(f"Best Threshold: {best_t}\n", report_text)
-
-    def plot_learning_curve_for_smote(self):
-        model = AdaBoostClassifier(**self.best_params, random_state=42)
-        train_percentages = np.linspace(0.1, 1.0, 10)
-        train_sizes, train_scores, val_scores = [], [], []
-
-        for p in train_percentages:
-            n_samples = int(p * len(self.X_train))
-            train_sizes.append(n_samples)
-            X_subset, y_subset = self.X_train[:n_samples], self.y_train[:n_samples]
-            model.fit(X_subset, y_subset)
-            train_scores.append(
-                f1_score(y_subset, model.predict(X_subset), average="macro")
-            )
-            val_scores.append(
-                f1_score(self.y_val, model.predict(self.X_val), average="macro")
-            )
-
-        plt.figure(figsize=(10, 6))
-        plt.plot(train_sizes, train_scores, "o-", color="#d32f2f", label="Train F1")
-        plt.plot(train_sizes, val_scores, "o-", color="#1976d2", label="Val F1")
-        plt.title("Learning Curve - AdaBoost")
-        plt.legend()
-        plt.savefig(f"learning_curve_{self.__class__.__name__}.png")
-        mlflow.log_artifact(f"learning_curve_{self.__class__.__name__}.png")
-        plt.close()
+        logger.success(f"Done | MCC={best_mcc:.4f} | T={best_t}")
 
 
-class DecisionTreeModel:
+class DecisionTreeModel(BaseModel):
     def __init__(self, X_train, y_train, X_val, y_val, X_test, y_test):
-        self.X_train = X_train
-        self.y_train = y_train
-        self.X_val = X_val
-        self.y_val = y_val
-        self.X_test = X_test
-        self.y_test = y_test
+        super().__init__(X_train, y_train, X_val, y_val, X_test, y_test)
         self.best_params = None
-        self.model = None
 
     def objective_dt(self, trial):
-        param = {
-            "max_depth": trial.suggest_int("max_depth", 3, 12),
-            "min_samples_split": trial.suggest_int("min_samples_split", 10, 50),
-            "min_samples_leaf": trial.suggest_int("min_samples_leaf", 10, 50),
+        params = {
+            "max_depth": trial.suggest_int("max_depth", 3, 8),
+            "min_samples_split": trial.suggest_int("min_samples_split", 20, 100),
+            "min_samples_leaf": trial.suggest_int("min_samples_leaf", 20, 100),
             "criterion": trial.suggest_categorical("criterion", ["gini", "entropy"]),
             "class_weight": "balanced",
             "random_state": 42,
         }
 
-        model = DecisionTreeClassifier(**param)
+        model = DecisionTreeClassifier(**params)
         model.fit(self.X_train, self.y_train)
 
         proba = model.predict_proba(self.X_val)[:, 1]
 
-        best_mcc = -1
-        for t in [0.3, 0.4, 0.5, 0.6]:
-            y_pred = (proba > t).astype(int)
-            mcc = matthews_corrcoef(self.y_val, y_pred)
-            if mcc > best_mcc:
-                best_mcc = mcc
+        best_mcc, _ = self.find_best_threshold_mcc(proba, y_true=self.y_val)
 
         return best_mcc
 
     def model_train(self):
+        logger.info("Training DecisionTree")
         study = optuna.create_study(direction="maximize")
-        study.optimize(self.objective_dt, n_trials=50, n_jobs=2)
+        study.optimize(self.objective_dt, n_trials=160, n_jobs=2)
 
         self.best_params = study.best_params.copy()
 
-        X_combined = pd.concat([self.X_train, self.X_val])
-        y_combined = pd.concat([self.y_train, self.y_val])
-
         self.model = DecisionTreeClassifier(
-            **self.best_params, class_weight="balanced", random_state=42
+            **self.best_params,
+            class_weight="balanced",
+            random_state=42,
         )
-        self.model.fit(X_combined, y_combined)
 
+        self.train_final_model()
+
+        # MLflow logging
         mlflow.log_params(self.best_params)
+        mlflow.log_param("model_name", "decision_tree")
+
+        self.cross_validate()
+
+        logger.success("Training done")
 
     def model_predict(self):
+        logger.info("Predicting DecisionTree")
+
         proba = self.model.predict_proba(self.X_test)[:, 1]
-        best_f1, best_t = 0, 0.5
-        for t in [0.3, 0.4, 0.5, 0.6]:
-            y_pred = (proba > t).astype(int)
-            f1 = f1_score(self.y_test, y_pred, average="macro")
-            if f1 > best_f1:
-                best_f1, best_t = f1, t
 
-        y_pred = (proba > best_t).astype(int)
+        y_pred, cm, best_mcc, best_t = self.evaluate(proba)
 
-        # report_dict = classification_report(self.y_test, y_pred, output_dict=True)
-        report_text = classification_report(self.y_test, y_pred)
+        self.log_classification_report(y_pred, model_name="decision_tree")
+        self.log_error_analysis(y_pred, model_name="decision_tree")
+        self.plot_confusion_matrix(cm, model_name="decision_tree")
+        self.plot_roc(proba, model_name="decision_tree")
+        self.plot_learning_curve(model_name="decision_tree")
 
-        mlflow.log_metric("f1_macro", best_f1)
-        mlflow.log_metric("accuracy", accuracy_score(self.y_test, y_pred))
-        mlflow.log_metric("mcc", matthews_corrcoef(self.y_test, y_pred))
-        mlflow.log_metric("best_threshold", best_t)
-        mlflow.sklearn.log_model(self.model, "model")
+        self.log_and_register_model("decision_tree")
 
-        report_filename = f"classification_report_{self.__class__.__name__}.txt"
-        with open(report_filename, "w") as f:
-            f.write(report_text)
-        mlflow.log_artifact(report_filename)
-
-        cm_filename = f"confusion_matrix_{self.__class__.__name__}.png"
-        plt.figure(figsize=(8, 6))
-        cm = confusion_matrix(self.y_test, y_pred)
-        ConfusionMatrixDisplay(confusion_matrix=cm).plot(cmap="Purples")
-        plt.title(f"Confusion Matrix - {self.__class__.__name__}")
-        plt.savefig(cm_filename)
-        mlflow.log_artifact(cm_filename)
-        plt.close()
-
-        print(f"\n{'=' * 20} DecisionTree {'=' * 20}")
-        print(f"Best Threshold: {best_t}\n", report_text)
-
-    def plot_learning_curve_for_smote(self):
-        model = DecisionTreeClassifier(
-            **self.best_params, class_weight="balanced", random_state=42
-        )
-        train_percentages = np.linspace(0.1, 1.0, 10)
-        train_sizes, train_scores, val_scores = [], [], []
-
-        for p in train_percentages:
-            n_samples = int(p * len(self.X_train))
-            train_sizes.append(n_samples)
-            X_subset, y_subset = self.X_train[:n_samples], self.y_train[:n_samples]
-            model.fit(X_subset, y_subset)
-            train_scores.append(
-                f1_score(y_subset, model.predict(X_subset), average="macro")
-            )
-            val_scores.append(
-                f1_score(self.y_val, model.predict(self.X_val), average="macro")
-            )
-
-        plt.figure(figsize=(10, 6))
-        plt.plot(train_sizes, train_scores, "o-", color="#7b1fa2", label="Train F1")
-        plt.plot(train_sizes, val_scores, "o-", color="#1976d2", label="Val F1")
-        plt.title("Learning Curve - DecisionTree")
-        plt.legend()
-        plt.savefig(f"learning_curve_{self.__class__.__name__}.png")
-        mlflow.log_artifact(f"learning_curve_{self.__class__.__name__}.png")
-        plt.close()
+        logger.success(f"Done | MCC={best_mcc:.4f} | T={best_t}")
