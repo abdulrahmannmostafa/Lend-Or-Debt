@@ -168,10 +168,12 @@ class EDA:
         # ─── 1. UNIVARIATE: Distribution of Limit Bal ──────────────────────────
         # WHY: Price is right-skewed (few very expensive orders).
         # Histogram + KDE together show both frequency and shape.
-        if data_type:
+        if data_type == 1:
             full_df = self.full_df_cleaned.copy()
-        else:
+        elif data_type == 0:
             full_df = self.full_df_transformed.copy()
+        else:
+            full_df = self.full_df_transformed_without_smote.copy()
         fig, axes = plt.subplots(1, 3, figsize=(15, 4))
         # Creates a figure with 1 row and 3 columns of subplots
         # axes[0] = histogram, axes[1] = KDE, axes[2] = box plot
@@ -235,10 +237,12 @@ class EDA:
         print(full_df[column_name].describe().round(2))
 
     def apply_pie_chart(self, feature, mapping, data_type=0):
-        if data_type:
+        if data_type == 1:
             full_df = self.full_df_cleaned.copy()
-        else:
+        elif data_type == 0:
             full_df = self.full_df_transformed.copy()
+        else:
+            full_df = self.full_df_transformed_without_smote.copy()
         palette = sns.color_palette("Set2", 8)
         plt.figure(figsize=(4, 4))
         counts_series = full_df[feature].map(mapping)
