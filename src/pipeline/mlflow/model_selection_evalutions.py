@@ -5,9 +5,9 @@ import pandas as pd
 from loguru import logger
 
 from src.pipeline.config import (
-    test_transformed_path,
-    train_transformed_path,
-    val_transformed_path,
+    test_transformed_path_without_smote,
+    train_transformed_path_without_smote,
+    val_transformed_path_without_smote,
 )
 from src.pipeline.feature_extraction import FeatureExtractor
 from src.pipeline.mlflow.models import (
@@ -32,9 +32,9 @@ class DataLoader:
         self.feature_extractor = FeatureExtractor()
 
     def load_data(self):
-        self.train_data = pd.read_csv(train_transformed_path)
-        self.validation_data = pd.read_csv(val_transformed_path)
-        self.test_data = pd.read_csv(test_transformed_path)
+        self.train_data = pd.read_csv(train_transformed_path_without_smote)
+        self.validation_data = pd.read_csv(val_transformed_path_without_smote)
+        self.test_data = pd.read_csv(test_transformed_path_without_smote)
 
         target = "default payment next month"
 
@@ -180,16 +180,51 @@ class DataLoader:
 
 
 def main():
+    
+
     dl = DataLoader()
     dl.run_experiment(
-        model_type=9, smote=True, feature_selection="spearman", version=1, k=20
-    )
+        model_type=6, smote=False, feature_selection="spearman", version=4, k=20
+        )
     dl.run_experiment(
-        model_type=9, smote=True, feature_selection="mutual_info", version=2, k=20
-    )
+        model_type=6, smote=False, feature_selection="mutual_info", version=5, k=20
+        )
     dl.run_experiment(
-        model_type=9, smote=True, feature_selection="intersect", version=3, k=25
-    )
+        model_type=6, smote=False, feature_selection="intersect", version=6, k=25
+        )
+    
+    dl.run_experiment(
+        model_type=7, smote=False, feature_selection="spearman", version=4, k=20
+        )
+    dl.run_experiment(
+        model_type=7, smote=False, feature_selection="mutual_info", version=5, k=20
+        )
+    dl.run_experiment(
+        model_type=7, smote=False, feature_selection="intersect", version=6, k=25
+        )
+    
+    dl.run_experiment(
+        model_type=8, smote=False, feature_selection="spearman", version=4, k=20
+        )
+    dl.run_experiment(
+        model_type=8, smote=False, feature_selection="mutual_info", version=5, k=20
+        )
+    dl.run_experiment(
+        model_type=8, smote=False, feature_selection="intersect", version=6, k=25
+        )
+    
+    dl.run_experiment(
+    model_type=9, smote=False, feature_selection="spearman", version=4, k=20
+        )
+    dl.run_experiment(
+        model_type=9, smote=False, feature_selection="mutual_info", version=5, k=20
+        )
+    dl.run_experiment(
+        model_type=9, smote=False, feature_selection="intersect", version=6, k=25
+        )
+    
+
+
 
 
 if __name__ == "__main__":
