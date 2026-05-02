@@ -1,4 +1,4 @@
-import logging
+from loguru import logger
 import pandas as pd  # Data manipulation and analysis
 import numpy as np  # Numerical computing
 import matplotlib.pyplot as plt  # Core plotting (the matplotlib.pyplot module)
@@ -6,14 +6,19 @@ from scipy import stats
 import seaborn as sns  # Statistical visualizations (built on matplotlib)
 from pathlib import Path
 from scipy.stats import pearsonr, linregress
+from src.pipeline.config import (
+    test_transformed_path_without_smote,
+    train_transformed_path_without_smote,
+    val_transformed_path_without_smote,
+)
 
 plt.style.use("dark_background")
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
-)
-log = logging.getLogger(__name__)
+# logging.basicConfig(
+#     level=logging.INFO,
+#     format="%(asctime)s | %(levelname)s | %(message)s",
+# )
+# log = logging.getLogger(__name__)
 
 
 class EDA:
@@ -25,16 +30,28 @@ class EDA:
         train_input_transformed,
         val_input_transformed,
         test_input_transformed,
+        train_input_transformed_without_smote=train_transformed_path_without_smote,
+        val_input_transformed_without_smote=val_transformed_path_without_smote,
+        test_input_transformed_without_smote=test_transformed_path_without_smote,
     ):
-        log.info("EDA Module has started")
+        logger.info("EDA Module has started")
         self.full_df_transformed = None
         self.full_df_cleaned = None
+        self.full_df_transformed_without_smote = None
+
         self.train_input_cleaned = train_input_cleaned
         self.val_input_cleaned = val_input_cleaned
         self.test_input_cleaned = test_input_cleaned
+
         self.train_input_transformed = train_input_transformed
         self.val_input_transformed = val_input_transformed
         self.test_input_transformed = test_input_transformed
+
+        self.train_input_transformed_without_smote = (
+            train_input_transformed_without_smote
+        )
+        self.val_input_transformed_without_smote = val_input_transformed_without_smote
+        self.test_input_transformed_without_smote = test_input_transformed_without_smote
         self.discrete_features = [
             "default payment next month",
             "SEX",
@@ -51,35 +68,67 @@ class EDA:
             "is_anomaly": ["Normal", "Anomaly"],
             "is_underpaying": ["not_underpaying", "is_underpaying"],
         }
+        self.continuous_features = [
+            "LIMIT_BAL",
+            "AGE",
+            "PAY_1",
+            "PAY_2",
+            "PAY_3",
+            "PAY_4",
+            "PAY_5",
+            "PAY_6",
+            "PAY_AMT1",
+            "PAY_AMT2",
+            "PAY_AMT3",
+            "PAY_AMT4",
+            "PAY_AMT5",
+            "PAY_AMT6",
+            "avg_bill",
+            "avg_payment",
+            "max_delinquency",
+            "total_delinquency",
+            "utilisation_ratio",
+            "LIMIT_BAL_sq",
+            "limit_x_bill",
+            "payment_ratio",
+            "avg_unpaid_balance",
+            "is_underpaying",
+            "cpi_risk_norm",
+            "gdp_x_payment_ratio",
+            "taiex_x_utilisation",
+            "rate_x_delinquency",
+            "unemp_x_delinquency",
+            "BILL_AMT_PC1",
+            "BILL_AMT_PC2",
+        ]
 
     def load_data_transformed(self):
-        log.info("This loader for transformed data eda")
-        log.info("train data is loaded")
+        logger.info("This loader for transformed data eda")
+        logger.info("train data is loaded")
         train_dataset = pd.read_csv(self.train_input_transformed)
-        log.info("val data is loaded")
+        logger.info("val data is loaded")
         val_dataset = pd.read_csv(self.val_input_transformed)
-        log.info("test data is loaded")
+        logger.info("test data is loaded")
         test_dataset = pd.read_csv(self.test_input_transformed)
-
-        print(f"train shape is: {train_dataset.shape}")
-        print(f"val shape is: {val_dataset.shape}")
-        print(f"test shape is: {test_dataset.shape}")
+        logger.info(f"train shape is: {train_dataset.shape}")
+        logger.info(f"val shape is: {val_dataset.shape}")
+        logger.info(f"test shape is: {test_dataset.shape}")
         full_df = pd.concat(
             [train_dataset, val_dataset, test_dataset], ignore_index=True
         )
         # ignore_index=True --> to combine index from 0 to N  instead of duplicates
         self.full_df_transformed = full_df
-        log.info("full data has being created and ready for EDA")
-        print(f"full data shape is: {full_df.shape}")
+        logger.info("full data has being created and ready for EDA")
+        logger.success(f"full data shape is: {full_df.shape}")
         return train_dataset, val_dataset, test_dataset, full_df
 
     def load_data_cleaned(self):
-        log.info("This loader for cleaned data eda")
-        log.info("train data is loaded")
+        logger.info("This loader for cleaned data eda")
+        logger.info("train data is loaded")
         train_dataset = pd.read_csv(self.train_input_cleaned)
-        log.info("val data is loaded")
+        logger.info("val data is loaded")
         val_dataset = pd.read_csv(self.val_input_cleaned)
-        log.info("test data is loaded")
+        logger.info("test data is loaded")
         test_dataset = pd.read_csv(self.test_input_cleaned)
 
         print(f"train shape is: {train_dataset.shape}")
@@ -90,18 +139,41 @@ class EDA:
         )
         # ignore_index=True --> to combine index from 0 to N  instead of duplicates
         self.full_df_cleaned = full_df
-        log.info("full data has being created and ready for EDA")
-        print(f"full data shape is: {full_df.shape}")
+        logger.success(
+            f"full data has being created and ready for EDA with shape: {full_df.shape}"
+        )
+        return train_dataset, val_dataset, test_dataset, full_df
+
+    def load_data_transformed_without_smote(self):
+        logger.info("This loader for transformed without smote data eda")
+        logger.info("train data is loaded")
+        train_dataset = pd.read_csv(self.train_input_transformed_without_smote)
+        logger.info("val data is loaded")
+        val_dataset = pd.read_csv(self.val_input_transformed_without_smote)
+        logger.info("test data is loaded")
+        test_dataset = pd.read_csv(self.test_input_transformed_without_smote)
+        logger.info(f"train shape is: {train_dataset.shape}")
+        logger.info(f"val shape is: {val_dataset.shape}")
+        logger.info(f"test shape is: {test_dataset.shape}")
+        full_df = pd.concat(
+            [train_dataset, val_dataset, test_dataset], ignore_index=True
+        )
+        # ignore_index=True --> to combine index from 0 to N  instead of duplicates
+        self.full_df_transformed_without_smote = full_df
+        logger.info("full data has being created and ready for EDA")
+        logger.success(f"full data shape is: {full_df.shape}")
         return train_dataset, val_dataset, test_dataset, full_df
 
     def apply_univariate(self, column_name, data_type=0):
         # ─── 1. UNIVARIATE: Distribution of Limit Bal ──────────────────────────
         # WHY: Price is right-skewed (few very expensive orders).
         # Histogram + KDE together show both frequency and shape.
-        if data_type:
+        if data_type == 1:
             full_df = self.full_df_cleaned.copy()
-        else:
+        elif data_type == 0:
             full_df = self.full_df_transformed.copy()
+        else:
+            full_df = self.full_df_transformed_without_smote.copy()
         fig, axes = plt.subplots(1, 3, figsize=(15, 4))
         # Creates a figure with 1 row and 3 columns of subplots
         # axes[0] = histogram, axes[1] = KDE, axes[2] = box plot
@@ -165,10 +237,12 @@ class EDA:
         print(full_df[column_name].describe().round(2))
 
     def apply_pie_chart(self, feature, mapping, data_type=0):
-        if data_type:
+        if data_type == 1:
             full_df = self.full_df_cleaned.copy()
-        else:
+        elif data_type == 0:
             full_df = self.full_df_transformed.copy()
+        else:
+            full_df = self.full_df_transformed_without_smote.copy()
         palette = sns.color_palette("Set2", 8)
         plt.figure(figsize=(4, 4))
         counts_series = full_df[feature].map(mapping)
@@ -191,11 +265,11 @@ class EDA:
         plt.show()
 
     #######################################################################
-    def continues_versus_continuous_eda(self, continuous_features):
+    def continues_versus_continuous_eda(self):
 
-        n = len(continuous_features)
+        n = len(self.continuous_features)
 
-        for i, row_feat in enumerate(continuous_features):
+        for i, row_feat in enumerate(self.continuous_features):
             fig, axes = plt.subplots(1, n, figsize=(n * 5, 5))
 
             if n == 1:
@@ -208,7 +282,7 @@ class EDA:
                 y=1.05,
             )
 
-            for j, col_feat in enumerate(continuous_features):
+            for j, col_feat in enumerate(self.continuous_features):
                 ax = axes[j]
 
                 if row_feat == col_feat:
@@ -434,6 +508,7 @@ def run_eda(
     )
     eda.load_data_transformed()
     eda.load_data_cleaned()
+    eda.load_data_transformed_without_smote()
 
 
 if __name__ == "__main__":
@@ -462,4 +537,4 @@ if __name__ != "__main__":
                 test_input_transformed="data/transformed/test_transformed.csv",
             )
     except Exception as e:
-        log.warning(f"Auto-eda failed during import: {e}")
+        logger.warning(f"Auto-eda failed during import: {e}")
