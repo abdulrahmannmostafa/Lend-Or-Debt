@@ -28,7 +28,7 @@
 The system is built as a **fully reproducible, phased pipeline**:
 
 1. Acquire and merge data from multiple sources
-2. Validate data quality with Great Expectations
+2. Validate data quality with Pandas
 3. Clean and split into train / validation / test sets
 4. Transform features (encoding, scaling, SMOTE oversampling)
 5. Perform exploratory data analysis (EDA)
