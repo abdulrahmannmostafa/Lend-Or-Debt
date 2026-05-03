@@ -1,6 +1,6 @@
 # Data Validation Report
 
-**Generated:** 2026-05-03 00:55:19
+**Generated:** 2026-05-03 14:36:16
 **Source:** taiwan_merged.csv
 
 **Total checks:** 121 | **Passed:** 94 | **Failed:** 27
