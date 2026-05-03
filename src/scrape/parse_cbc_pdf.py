@@ -4,27 +4,8 @@ import os
 import pdfplumber
 
 
+# I made that to parse the CBC annual report PDF
 def parse_cbc_rates(save_path: str = "../data/cbc_rates_2005.csv"):
-    """
-    CBC (Central Bank of Taiwan) discount rate for April-September 2005
-
-    Source: Central Bank of the Republic of China (Taiwan) — CBC Annual Report 2007
-    URL: https://www.cbc.gov.tw/en/dl-4540-56b72153752e4a3aa97e88a4e6f6caca.html
-
-    The CBC raised its discount rate three times in 2005:
-      - March 25  -> 2.000%
-      - July 1    -> 2.125%
-      - December 23 -> 2.250%
-
-    For the Taiwan credit card dataset observation window (April-September 2005),
-    the applicable rates are:
-      April, May, June   -> 2.000% (post March 25 hike, pre July 1 hike)
-      July, August, Sept -> 2.125% (post July 1 hike, pre December 23 hike)
-
-    Scraping strategy: Attempt to download and parse the CBC Annual Report PDF.
-    Fall back to documented rate values from official CBC publications if PDF
-    parsing fails due to encoding or structure issues.
-    """
 
     # Download the PDF of Central Bank of Taiwan
     pdf_url = "https://www.cbc.gov.tw/en/dl-4540-56b72153752e4a3aa97e88a4e6f6caca.html"
@@ -38,6 +19,7 @@ def parse_cbc_rates(save_path: str = "../data/cbc_rates_2005.csv"):
         )
 
         # Check if response is actually a PDF
+        # I check as well if the first four bytes of the content are "%PDF" which is a common signature for PDF files, as some servers might return an HTML page with a PDF content type if the PDF is not directly accessible
         if (
             response.headers.get("Content-Type", "").startswith("application/pdf")
             or response.content[:4] == b"%PDF"
@@ -61,8 +43,8 @@ def parse_cbc_rates(save_path: str = "../data/cbc_rates_2005.csv"):
                         break
 
         else:
-            print("Response is not a PDF — it is an HTML page.")
-            print("CBC serves the annual report as HTML, not direct PDF download.")
+            print("Response is not a PDF — it is an HTML page")
+            print("CBC serves the annual report as HTML, not direct PDF download")
 
     except Exception as e:
         print(f"PDF attempt failed: {e}")
@@ -93,6 +75,7 @@ def parse_cbc_rates(save_path: str = "../data/cbc_rates_2005.csv"):
 
     df = pd.DataFrame(data)
 
+    # index is false because we don't need the default integer index in the CSV, the Year and Month columns serve as natural identifiers for each row
     df.to_csv(save_path, index=False)
 
     print(f"\nCBC discount rates saved: {df.shape} -> {save_path}")
