@@ -17,6 +17,15 @@ def _make_phase(number: int, mock_fn=None) -> dict:
     }
 
 
+def _make_phase6(mock_fn=None) -> dict:
+    """Build a phase 6 dict — its fn receives model_kwargs, not phase['kwargs']."""
+    return {
+        "name": "6 | Phase 6",
+        "fn": mock_fn or MagicMock(return_value=None),
+        "kwargs": {},
+    }
+
+
 class TestPhaseNumber:
     def test_extracts_integer_from_name(self):
         from src.pipeline.master_pipeline import _phase_number
@@ -42,6 +51,7 @@ class TestPhaseNumber:
             "3 | Data Cleaning",
             "4 | Data Transformation",
             "5 | EDA",
+            "6 | Model Training and Selection",
         ]
         for i, name in enumerate(names, start=1):
             assert _phase_number(name) == i
@@ -49,12 +59,12 @@ class TestPhaseNumber:
 
 class TestRunPipelineOrchestration:
 
-    def _run_with_phases(self, phases, start_from=1):
+    def _run_with_phases(self, phases, start_from=1, model_kwargs=None):
         with patch("src.pipeline.master_pipeline._PHASES", phases):
             from src.pipeline.master_pipeline import run_pipeline
 
             try:
-                run_pipeline(start_from=start_from)
+                run_pipeline(start_from=start_from, model_kwargs=model_kwargs)
             except SystemExit:
                 pass
 
@@ -100,6 +110,61 @@ class TestRunPipelineOrchestration:
         phases = [_make_phase(i + 1, make_fn(i + 1)) for i in range(3)]
         self._run_with_phases(phases)
         assert call_order == [1, 2, 3]
+
+
+class TestPhase6ModelKwargs:
+    """Phase 6 uses model_kwargs instead of phase['kwargs'] when model_kwargs is provided."""
+
+    def _run_with_phases(self, phases, model_kwargs=None, start_from=1):
+        with patch("src.pipeline.master_pipeline._PHASES", phases):
+            from src.pipeline.master_pipeline import run_pipeline
+
+            try:
+                run_pipeline(start_from=start_from, model_kwargs=model_kwargs)
+            except SystemExit:
+                pass
+
+    def test_phase6_called_with_model_kwargs_when_provided(self):
+        fn = MagicMock()
+        phases = [_make_phase6(fn)]
+        model_kwargs = {"model_type": 2, "smote": True, "feature_selection": "spearman", "version": 1, "k": 20}
+        self._run_with_phases(phases, model_kwargs=model_kwargs)
+        fn.assert_called_once_with(**model_kwargs)
+
+    def test_phase6_called_with_phase_kwargs_when_model_kwargs_is_none(self):
+        fn = MagicMock()
+        phases = [{"name": "6 | Phase 6", "fn": fn, "kwargs": {"some_key": "some_val"}}]
+        self._run_with_phases(phases, model_kwargs=None)
+        fn.assert_called_once_with(some_key="some_val")
+
+    def test_non_phase6_not_affected_by_model_kwargs(self):
+        fn = MagicMock()
+        phases = [{"name": "1 | Phase 1", "fn": fn, "kwargs": {"x": 42}}]
+        model_kwargs = {"model_type": 6, "smote": False, "feature_selection": "spearman", "version": 1, "k": 20}
+        self._run_with_phases(phases, model_kwargs=model_kwargs)
+        fn.assert_called_once_with(x=42)
+
+    def test_phase6_receives_model_kwargs_not_phase_kwargs(self):
+        fn = MagicMock()
+        # Even if phase['kwargs'] has something, model_kwargs should take precedence
+        phases = [{"name": "6 | Phase 6", "fn": fn, "kwargs": {"ignored": True}}]
+        model_kwargs = {"model_type": 3, "smote": False, "feature_selection": "lasso", "version": 2, "k": 10}
+        self._run_with_phases(phases, model_kwargs=model_kwargs)
+        fn.assert_called_once_with(**model_kwargs)
+        call_kwargs = fn.call_args[1]
+        assert "ignored" not in call_kwargs
+
+    def test_mixed_phases_only_phase6_gets_model_kwargs(self):
+        fn1 = MagicMock()
+        fn6 = MagicMock()
+        phases = [
+            {"name": "1 | Phase 1", "fn": fn1, "kwargs": {"x": 1}},
+            {"name": "6 | Phase 6", "fn": fn6, "kwargs": {}},
+        ]
+        model_kwargs = {"model_type": 6, "smote": True, "feature_selection": "spearman", "version": 1, "k": 20}
+        self._run_with_phases(phases, model_kwargs=model_kwargs)
+        fn1.assert_called_once_with(x=1)
+        fn6.assert_called_once_with(**model_kwargs)
 
 
 class TestRunPipelineFailureHandling:
@@ -166,6 +231,21 @@ class TestRunPipelineFailureHandling:
 
         fn2.assert_not_called()
 
+    def test_phase6_failure_stops_pipeline(self):
+        fn5 = MagicMock()
+        fn6 = MagicMock(side_effect=RuntimeError("model training failed"))
+        phases = [_make_phase(5, fn5), _make_phase6(fn6)]
+
+        with patch("src.pipeline.master_pipeline._PHASES", phases):
+            from src.pipeline.master_pipeline import run_pipeline
+
+            with pytest.raises(SystemExit) as exc_info:
+                run_pipeline(start_from=5, model_kwargs={"model_type": 6})
+
+        assert exc_info.value.code == 1
+        fn5.assert_called_once()
+        fn6.assert_called_once()
+
 
 class TestPipelineWithRealPhaseNames:
     @pytest.fixture()
@@ -227,8 +307,52 @@ class TestPipelineWithRealPhaseNames:
         for i, phase in enumerate(mp._PHASES):
             mock = all_phases_mocked[phase["name"]]
             _, actual_kwargs = mock.call_args
+            # Phase 6 with no model_kwargs falls back to phase['kwargs']
             assert actual_kwargs == phase["kwargs"], (
                 f"Phase '{phase['name']}' received wrong kwargs.\n"
+                f"  Expected: {phase['kwargs']}\n"
+                f"  Got:      {actual_kwargs}"
+            )
+
+    def test_real_phase6_uses_model_kwargs_when_provided(self, all_phases_mocked):
+        import src.pipeline.master_pipeline as mp
+
+        model_kwargs = {
+            "model_type": 2,
+            "smote": True,
+            "feature_selection": "spearman",
+            "version": 1,
+            "k": 20,
+        }
+        mp.run_pipeline(start_from=1, model_kwargs=model_kwargs)
+
+        phase6_name = next(n for n in all_phases_mocked if mp._phase_number(n) == 6)
+        _, actual_kwargs = all_phases_mocked[phase6_name].call_args
+        assert actual_kwargs == model_kwargs, (
+            f"Phase 6 should receive model_kwargs.\n"
+            f"  Expected: {model_kwargs}\n"
+            f"  Got:      {actual_kwargs}"
+        )
+
+    def test_phases_1_to_5_unaffected_by_model_kwargs(self, all_phases_mocked):
+        import src.pipeline.master_pipeline as mp
+
+        model_kwargs = {
+            "model_type": 6,
+            "smote": False,
+            "feature_selection": "lasso",
+            "version": 3,
+            "k": 15,
+        }
+        mp.run_pipeline(start_from=1, model_kwargs=model_kwargs)
+
+        for i, phase in enumerate(mp._PHASES):
+            if mp._phase_number(phase["name"]) == 6:
+                continue
+            mock = all_phases_mocked[phase["name"]]
+            _, actual_kwargs = mock.call_args
+            assert actual_kwargs == phase["kwargs"], (
+                f"Phase '{phase['name']}' should not be affected by model_kwargs.\n"
                 f"  Expected: {phase['kwargs']}\n"
                 f"  Got:      {actual_kwargs}"
             )
