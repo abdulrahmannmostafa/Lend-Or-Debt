@@ -110,10 +110,7 @@ NUMERIC_COLS = [
 ]
 
 
-# Check builder
-# ---------------------------------------------------------------------------
-
-
+# I built that function to have a consistent way to format the results of each validation check across all dimensions
 def _check(label: str, passed: bool, observed=None, expected=None) -> dict:
     return {
         "check": label,
@@ -125,18 +122,15 @@ def _check(label: str, passed: bool, observed=None, expected=None) -> dict:
 
 # Dimension 1 — Accuracy
 # "Does data correctly represent reality?"
-# ===========================================================================
+# --------------------------------------------------------------
 
 
 def validate_accuracy(df: pd.DataFrame) -> list:
-    """
-    Verify values match known real-world 2005 Taiwan benchmarks and basic business-rule constraints (Age > 0, credit limit positive, etc)
-    """
     log.info("Validating Dimension 1: Accuracy")
 
     results = []
 
-    # AGE must be a logical human age for a credit card holder
+    # AGE must be a logical human age for a credit card holder from 18 to 100 years old
     if "AGE" in df.columns:
         bad = int(((df["AGE"] < 18) | (df["AGE"] > 100)).sum())
         results.append(
@@ -216,9 +210,6 @@ def validate_accuracy(df: pd.DataFrame) -> list:
 
 
 def validate_consistency(df: pd.DataFrame) -> list:
-    """
-    Verify internal logical relationships hold across columns
-    """
     log.info("Validating Dimension 2: Consistency")
 
     results = []
@@ -267,6 +258,8 @@ def validate_consistency(df: pd.DataFrame) -> list:
         )
 
     # Credit notes cannot exceed -1M NTD
+    # I check if the value is below -1M (more negative than -1M) because credit notes are negative amounts
+    # If the value is above -1M (less negative than -1M), that is consistent with reality because credit notes are typically smaller than 1M NTD in magnitude
     if "avg_bill" in df.columns:
         too_low = int((df["avg_bill"] < -1_000_000).sum())
         results.append(
@@ -304,13 +297,9 @@ def validate_consistency(df: pd.DataFrame) -> list:
 
 # Dimension 3 — Completeness
 # "Is all the required data present?"
-# ===========================================================================
 
 
 def validate_completeness(df: pd.DataFrame) -> list:
-    """
-    Verify no data is missing
-    """
     log.info("Validating Dimension 3: Completeness")
 
     results = []
@@ -325,7 +314,7 @@ def validate_completeness(df: pd.DataFrame) -> list:
         )
     )
 
-    # Per-column null counts + missing percentage (lecture: flag >20%)
+    # Per-column null counts + missing percentage (lecture included that: flag >20%)
     for col in df.columns:
         null_count = int(df[col].isnull().sum())
         pct = round(null_count / len(df) * 100, 2)
@@ -348,9 +337,6 @@ def validate_completeness(df: pd.DataFrame) -> list:
 
 
 def validate_uniqueness(df: pd.DataFrame) -> list:
-    """
-    Verify no duplicate records exist
-    """
     log.info("Validating Dimension 4: Uniqueness")
     results = []
 
@@ -367,6 +353,7 @@ def validate_uniqueness(df: pd.DataFrame) -> list:
 
     # Subset duplicates: same demographic profile
     # (LIMIT_BAL + SEX + EDUCATION + MARRIAGE + AGE)
+    # I made that because the dataset does not have a unique ID column, so we can check for duplicates based on a combination of demographic features
     key_cols = [
         c
         for c in ["LIMIT_BAL", "SEX", "EDUCATION", "MARRIAGE", "AGE"]
@@ -374,11 +361,10 @@ def validate_uniqueness(df: pd.DataFrame) -> list:
     ]
     if key_cols:
         dup_key = int(df.duplicated(subset=key_cols, keep=False).sum())
-        # Many legitimate borrowers share demographics; we only flag extreme counts
         results.append(
             _check(
                 f"Subset duplicate check on {key_cols} (informational)",
-                True,  # always passes — informational only
+                True,  # always passes — informational only to inspect
                 observed=f"{dup_key} rows share the same demographic profile",
                 expected="expected to have some — informational only",
             )
@@ -406,9 +392,6 @@ def validate_uniqueness(df: pd.DataFrame) -> list:
 
 
 def validate_outliers(df: pd.DataFrame) -> list:
-    """
-    Apply all three lecture methods (Z-Score, IQR, Isolation Forest) to the continuous numeric columns
-    """
     log.info("Validating Dimension 5: Outliers")
     results = []
 
@@ -428,19 +411,35 @@ def validate_outliers(df: pd.DataFrame) -> list:
     log.info("  Outlier Method 1: Z-Score (threshold ±3)")
     z_summary = {}
     for col in num_cols:
+        # I drop nulls to avoid skewing the z-score calculation
         col_data = df[col].dropna()
+
+        # Calculate z-scores and count how many values exceed the threshold of 3 in absolute value
         z_scores = np.abs(stats.zscore(col_data))
+
         n_out = int((z_scores > 3).sum())
+
         pct_out = round(n_out / len(col_data) * 100, 2)
+
         z_summary[col] = (n_out, pct_out)
 
+    # Summarize Z-score outliers across all numeric columns
+    # v[0] -> number of outliers
+    # v[1] -> percentage of outliers
+    # I sum v[0] across all columns to get the total count of detected outliers
     total_z = sum(v[0] for v in z_summary.values())
+
+    # Identify the top 5 columns with the highest number of outliers
+    # x[0] -> column name
+    # x[1][0] -> outlier count for that column
+    # Sort in descending order by outlier count, then keep only the top 5
     top_z = sorted(z_summary.items(), key=lambda x: x[1][0], reverse=True)[:5]
+
     top_z_str = ", ".join(f"{c}: {v[0]} ({v[1]}%)" for c, v in top_z)
     results.append(
         _check(
             "Z-Score outliers (|z| > 3) across continuous columns — top 5 columns",
-            True,  # informational
+            True,  # informational to inspect
             observed=f"total flagged={total_z} | top cols: {top_z_str}",
             expected="informational — review extreme values before modelling",
         )
@@ -450,21 +449,39 @@ def validate_outliers(df: pd.DataFrame) -> list:
     log.info("  Outlier Method 2: IQR")
     iqr_summary = {}
     for col in num_cols:
+        # I drop nulls to avoid skewing the IQR calculation, and because I already check for nulls in the Completeness dimension
         col_data = df[col].dropna()
+
         q1, q3 = col_data.quantile(0.25), col_data.quantile(0.75)
+
         iqr = q3 - q1
+
         lo, hi = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+
+        # I count how many values are outside the [lo, hi] range defined by the IQR method
         n_out = int(((col_data < lo) | (col_data > hi)).sum())
+
         pct_out = round(n_out / len(col_data) * 100, 2)
+
+        # I store the count and percentage of outliers for each column in the iqr_summary dictionary for later summarization
         iqr_summary[col] = (n_out, pct_out, round(lo, 2), round(hi, 2))
 
+    # Summarize IQR outliers across all numeric columns
+    # v[0] -> number of outliers
+    # v[1] -> percentage of outliers
+    # I sum v[0] across all columns to get the total count of detected outliers by the IQR method
     total_iqr = sum(v[0] for v in iqr_summary.values())
+
+    # Identify the top 5 columns with the highest number of outliers according to the IQR method
+    # x[0] -> column name
+    # x[1][0] -> outlier count for that column according to the IQR method
+    # Sort in descending order by outlier count, then keep only the top 5
     top_iqr = sorted(iqr_summary.items(), key=lambda x: x[1][0], reverse=True)[:5]
     top_iqr_str = ", ".join(f"{c}: {v[0]} ({v[1]}%)" for c, v in top_iqr)
     results.append(
         _check(
             "IQR outliers (Q1-1.5*IQR, Q3+1.5*IQR) across continuous columns — top 5",
-            True,  # always passes — informational only
+            True,  # always passes — informational only to inspect
             observed=f"total flagged={total_iqr} | top cols: {top_iqr_str}",
             expected="informational — skewed financial features expected to have IQR outliers",
         )
@@ -473,15 +490,27 @@ def validate_outliers(df: pd.DataFrame) -> list:
     # Isolation Forest (contamination=0.05)
     log.info("  Outlier Method 3: Isolation Forest (contamination=0.05)")
     try:
+
+        # I make median imputation to fill nulls in numeric columns before running Isolation Forest, because it cannot handle null values
+        # I choose median imputation because it is more robust to outliers than mean imputation
         iso_data = df[num_cols].fillna(df[num_cols].median())
+
+        # I used contamination=0.05 to flag approximately 5% of the data as anomalies
+        # This is a common default setting because I don't have a specific business rule for the expected anomaly rate
+        # n_jobs=-1 allows the algorithm to use all available CPU cores for faster processing on larger datasets
+        # random_state=42 ensures reproducibility of the results by fixing the random seed
         clf = IsolationForest(contamination=0.05, random_state=42, n_jobs=-1)
+
+        # fit_predict returns an array where -1 indicates an anomaly and 1 indicates a normal point
         labels = clf.fit_predict(iso_data)
+
+        # I count the number of anomalies
         n_anomalies = int((labels == -1).sum())
         pct_anom = round(n_anomalies / len(df) * 100, 2)
         results.append(
             _check(
                 f"Isolation Forest anomaly detection (contamination=0.05, {len(num_cols)} features)",
-                True,  # always passes — informational only
+                True,  # always passes — informational only to inspect
                 observed=f"{n_anomalies} anomalies detected ({pct_anom}%)",
                 expected="~5% flagged by design — review multivariate outliers before modelling",
             )
@@ -523,13 +552,12 @@ def validate_outliers(df: pd.DataFrame) -> list:
 
 
 def validate_timeliness(df: pd.DataFrame) -> list:
-    """
-    Verify macro data corresponds to April-September 2005, not another period
-    """
     log.info("Validating Dimension 6: Timeliness")
     results = []
 
     # Values consistent with post-2010 or post-2022 data are wrong
+    # I check that there is no values by accident from the post-2010 or post-2022 period
+    # I made that to indicate a timeliness issue if the data acquisition step fetched the wrong time period from the source
     timeliness_checks = [
         (
             "avg_macro_rate",
@@ -555,7 +583,11 @@ def validate_timeliness(df: pd.DataFrame) -> list:
     for col, ceiling, label in timeliness_checks:
         if col not in df.columns:
             continue
+
+        # Count bad rows
         bad = int((df[col] >= ceiling).sum())
+
+        # Calculate their mean
         mean = round(float(df[col].mean()), 4)
         results.append(
             _check(
@@ -567,8 +599,8 @@ def validate_timeliness(df: pd.DataFrame) -> list:
         )
 
     # Expected frequency: macro columns should have exactly 6 distinct months
-    # embedded in the panel (Apr-Sep 2005). Because we aggregate to borrower
-    # level, we verify plausibility via constant-value check instead
+    # embedded in the panel (Apr-Sep 2005). Because we aggregate to borrower level, we verify plausibility via constant value check instead
+    # because if there is much distinct values then no way that all borrowers share the same 6-month window, which indicates a timeliness issue
     for col in [
         "avg_macro_CPI",
         "avg_macro_GDP",
@@ -599,25 +631,21 @@ def validate_timeliness(df: pd.DataFrame) -> list:
 
 
 def validate_distribution(df: pd.DataFrame) -> list:
-    """
-    Statistical distribution profiling of all numeric columns
-    """
     log.info("Validating Dimension 7: Distribution Profile")
     results = []
 
     num_cols = [c for c in NUMERIC_COLS if c in df.columns]
 
     # Basic profile per column
+    # avoid skew/kurtosis noise from nulls because we already check for nulls in completeness dimension
     for col in num_cols:
-        s = df[
-            col
-        ].dropna()  # avoid skew/kurtosis noise from nulls because we already check for nulls in Completeness dimension
+        s = df[col].dropna()
         if len(s) == 0:
             continue
         col_skew = round(float(skew(s)), 3)
         col_kurt = round(float(kurtosis(s)), 3)  # excess kurtosis (0 = normal)
 
-        # Interpret skewness (lecture diagram: symmetric / positive / negative)
+        # Interpret skewness as symmetric, moderately skewed, or highly skewed based on threshold
         if abs(col_skew) < 0.5:
             skew_label = "symmetric (|skew|<0.5)"
         elif col_skew > 0:
@@ -625,7 +653,7 @@ def validate_distribution(df: pd.DataFrame) -> list:
         else:
             skew_label = f"negative skew ({col_skew})"
 
-        # Interpret kurtosis (lecture: leptokurtic / mesokurtic / platykurtic)
+        # Interpret kurtosis as leptokurtic, platykurtic, or mesokurtic based on excess kurtosis thresholds
         if col_kurt > 1:
             kurt_label = f"leptokurtic (excess={col_kurt})"
         elif col_kurt < -1:
@@ -633,12 +661,13 @@ def validate_distribution(df: pd.DataFrame) -> list:
         else:
             kurt_label = f"mesokurtic (excess={col_kurt})"
 
+        # I also include the 25th and 75th percentiles to give more insight into the distribution shape, especially for skewed financial features
         q25, q50, q75 = s.quantile([0.25, 0.50, 0.75])
 
         results.append(
             _check(
                 f"'{col}' distribution profile",
-                True,  # always passes — informational only
+                True,  # always passes — informational only to inspect
                 observed=(
                     f"min={s.min():.2f}, max={s.max():.2f}, "
                     f"mean={s.mean():.2f}, median={q50:.2f}, std={s.std():.2f} | "
@@ -657,9 +686,14 @@ def validate_distribution(df: pd.DataFrame) -> list:
         s = df[col].dropna()
         if len(s) < 50:
             continue
+
+        # I use the sample mean and std as parameters for the normal distribution in the KS test, which is a common approach to test for normality when parameters are estimated from the data
         ks_stat, p_val = kstest(s, "norm", args=(float(s.mean()), float(s.std())))
         ks_stat = round(ks_stat, 4)
         p_val = round(p_val, 4)
+
+        # If the p-value is greater than or equal to 0.05, we fail to reject the null hypothesis that the data follows a normal distribution
+        # so I can say that the data is "normal-like" in that case
         is_normal = p_val >= 0.05
         results.append(
             _check(
@@ -692,6 +726,7 @@ def validate_distribution(df: pd.DataFrame) -> list:
         )
 
     # Distribution checks from Yeh (2009) published facts
+    # I want to know the mean of ages based on the published paper to check if the data distribution is consistent with the original source
     if "AGE" in df.columns:
         mean_age = float(df["AGE"].mean())
         results.append(
@@ -703,6 +738,7 @@ def validate_distribution(df: pd.DataFrame) -> list:
             )
         )
 
+    # I want to check the mean of credit limits based on the published paper to see if the data distribution is consistent with the original source
     if "LIMIT_BAL" in df.columns:
         mean_limit = float(df["LIMIT_BAL"].mean())
         results.append(
@@ -714,6 +750,8 @@ def validate_distribution(df: pd.DataFrame) -> list:
             )
         )
 
+    # PAY_0 and PAY_2 should have a majority of on-time payments (value <= 0) because the dataset is from a stable economic period with relatively low delinquency rates
+    # so I expect at least 50% of payments to be on time in those columns
     for col in ["PAY_0", "PAY_2"]:
         if col not in df.columns:
             continue
@@ -736,9 +774,6 @@ def validate_distribution(df: pd.DataFrame) -> list:
 
 
 def validate_relationships(df: pd.DataFrame) -> list:
-    """
-    Correlation and dependency analysis between features
-    """
     log.info("Validating Dimension 8: Relationships Profile")
     results = []
 
@@ -774,8 +809,12 @@ def validate_relationships(df: pd.DataFrame) -> list:
     for c1, c2 in sample_pairs:
         if c1 not in df.columns or c2 not in df.columns:
             continue
+
+        # I calculate both Pearson and Spearman correlation coefficients for the pair of columns
         pearson = round(float(df[c1].corr(df[c2], method="pearson")), 4)
         spearman = round(float(df[c1].corr(df[c2], method="spearman")), 4)
+
+        # I compare the absolute difference between Pearson and Spearman correlations to identify potential non-linear relationships
         diff = abs(pearson - spearman)
         nonlinear_flag = diff > 0.1
         if nonlinear_flag:
@@ -791,9 +830,9 @@ def validate_relationships(df: pd.DataFrame) -> list:
 
     # High multicollinearity detection (Pearson |r| > 0.9)
     log.info("  Relationships: multicollinearity check (|Pearson| > 0.9)")
-    sub_cols = [c for c in num_cols if c in df.columns][
-        :20
-    ]  # cap for speed as correlation is O(n^2)
+
+    # I cap for speed as correlation is O(n^2) so I take the first 20 numeric columns
+    sub_cols = [c for c in num_cols if c in df.columns][:20]
     if len(sub_cols) >= 2:
         pearson_matrix = df[sub_cols].corr(method="pearson")
         high_pairs = []
@@ -855,9 +894,6 @@ def validate_relationships(df: pd.DataFrame) -> list:
 
 
 def validate_integrity(df: pd.DataFrame) -> list:
-    """
-    Structural checks: expected columns present, column count in range, row count exact (no merge fan-out), target column binary
-    """
     log.info("Validating Integrity (structural completeness)")
     results = []
 
@@ -893,6 +929,7 @@ def validate_integrity(df: pd.DataFrame) -> list:
     )
 
     if "default payment next month" in df.columns:
+        # Target column should be binary (0 or 1)
         non_binary = int((~df["default payment next month"].isin(TARGET_VALUES)).sum())
         results.append(
             _check(
@@ -922,14 +959,14 @@ def validate_integrity(df: pd.DataFrame) -> list:
 
 
 def compute_quality_metrics(df: pd.DataFrame, results: dict) -> dict:
-    """
-    Produce the quantified data quality score table:
-    """
     metrics = {}
 
     # Completeness: (non-null values / total values) x 100%
     total_vals = df.size
+
+    # I count the total number of non-null values across the entire DataFrame by summing the non-null counts for each column and then summing those counts together
     non_null = int(df.notnull().sum().sum())
+
     metrics["Completeness"] = {
         "formula": "(non-null values / total values) x 100%",
         "value": round(non_null / total_vals * 100, 4),
@@ -947,6 +984,7 @@ def compute_quality_metrics(df: pd.DataFrame, results: dict) -> dict:
     # Accuracy: checks passed in accuracy dimension / total accuracy checks
     acc_checks = results.get("1_Accuracy", [])
     acc_passed = sum(1 for c in acc_checks if c["success"])
+
     metrics["Accuracy"] = {
         "formula": "(passed accuracy checks / total accuracy checks) x 100%",
         "value": round(acc_passed / len(acc_checks) * 100, 2) if acc_checks else 0,
@@ -956,6 +994,7 @@ def compute_quality_metrics(df: pd.DataFrame, results: dict) -> dict:
     # Consistency: checks passed in consistency dimension
     con_checks = results.get("2_Consistency", [])
     con_passed = sum(1 for c in con_checks if c["success"])
+
     metrics["Consistency"] = {
         "formula": "(conforming records checks / total consistency checks) x 100%",
         "value": round(con_passed / len(con_checks) * 100, 2) if con_checks else 0,
@@ -972,6 +1011,7 @@ def compute_quality_metrics(df: pd.DataFrame, results: dict) -> dict:
             iqr = q3 - q1
             flagged += int(((s < q1 - 1.5 * iqr) | (s > q3 + 1.5 * iqr)).sum())
             total_v += len(s)
+
         metrics["Outliers"] = {
             "formula": "(non-outlier values / total values) x 100%  [IQR method]",
             "value": round((1 - flagged / total_v) * 100, 4) if total_v > 0 else 0,
@@ -981,6 +1021,7 @@ def compute_quality_metrics(df: pd.DataFrame, results: dict) -> dict:
     # Timeliness: checks passed / total
     tim_checks = results.get("6_Timeliness", [])
     tim_passed = sum(1 for c in tim_checks if c["success"])
+
     metrics["Timeliness"] = {
         "formula": "mean time from event to availability -> % timeliness checks passed",
         "value": round(tim_passed / len(tim_checks) * 100, 2) if tim_checks else 0,
@@ -994,6 +1035,7 @@ def compute_quality_metrics(df: pd.DataFrame, results: dict) -> dict:
         if len(s) >= 50:
             ks_stat, _ = kstest(s, "norm", args=(float(s.mean()), float(s.std())))
             ks_stats.append(ks_stat)
+
     metrics["Distribution"] = {
         "formula": "mean KS statistic across numeric columns (0=identical to normal, 1=completely different)",
         "value": round(float(np.mean(ks_stats)), 4) if ks_stats else None,
@@ -1011,6 +1053,7 @@ def compute_quality_metrics(df: pd.DataFrame, results: dict) -> dict:
         if c1 in df.columns and c2 in df.columns:
             r = df[c1].corr(df[c2], method="spearman")
             spearman_vals.append(abs(r))
+
     metrics["Relationships"] = {
         "formula": "mean |Spearman r| for key feature-to-target pairs",
         "value": round(float(np.mean(spearman_vals)), 4) if spearman_vals else None,
@@ -1079,15 +1122,24 @@ def _generate_markdown_report(results: dict, metrics: dict, output_path: str) ->
         "| Dimension | Formula | Value | Unit |",
         "|-----------|---------|-------|------|",
     ]
+
+    # I iterate over the computed quality metrics for each dimension and add a row to the markdown table with the dimension name, formula, computed value, and unit
+    # If a metric value is None, I display "N/A" in the table
     for dim, m in metrics.items():
         val = m["value"] if m["value"] is not None else "N/A"
         lines.append(f"| {dim} | {m['formula']} | {val} | {m['unit']} |")
 
     lines.append("\n---\n")
 
+    # Detailed results per dimension
     for key in sorted(results.keys()):
+        # I retrieve the list of checks for the current dimension and count how many passed and failed
         checks = results[key]
+
+        # I get the dimension name and description from the _DIMENSION_META dictionary using the key, and if the key is not found, I default to using the key itself as the name and an empty string as the description
         dim_name, dim_desc = _DIMENSION_META.get(key, (key, ""))
+
+        # Count passed and failed checks for this dimension
         passed = sum(1 for c in checks if c["success"])
         failed = len(checks) - passed
 
@@ -1162,9 +1214,6 @@ def run_validation(
     json_output: str = "data/validation_results.json",
     md_output: str = "data/validation_report.md",
 ) -> dict:
-    """
-    Run the full 8-dimension checks + integrity validation phases
-    """
     log.info("Loading merged dataset: %s", merged_path)
     df = pd.read_csv(merged_path)
     log.info("Loaded: %s rows x %s cols", *df.shape)
