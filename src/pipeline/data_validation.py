@@ -490,7 +490,6 @@ def validate_outliers(df: pd.DataFrame) -> list:
     # Isolation Forest (contamination=0.05)
     log.info("  Outlier Method 3: Isolation Forest (contamination=0.05)")
     try:
-
         # I make median imputation to fill nulls in numeric columns before running Isolation Forest, because it cannot handle null values
         # I choose median imputation because it is more robust to outliers than mean imputation
         iso_data = df[num_cols].fillna(df[num_cols].median())

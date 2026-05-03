@@ -30,7 +30,6 @@ def scrape_unemployment(save_path: str = "../data/unemployment_2005.csv"):
 
     # Loop through each record in the XML (That tag contains the unemployment rate data by county)
     for record in root.findall("縣市別失業率"):
-
         # Extract the period (like "2005Jan.-June", "2005July-Dec.")
         period = record.findtext("年月別_Year_and_month", default="").strip()
 
