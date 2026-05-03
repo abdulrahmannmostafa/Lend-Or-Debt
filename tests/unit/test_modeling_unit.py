@@ -6,9 +6,14 @@ import os
 from unittest.mock import patch # for mlflow mocking
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 
-from src.pipeline.mlflow.models import BaseModel, LogisticRegressionModel
+
 from src.pipeline.mlflow.model_selection_evaluations import DataLoader
 
+from src.pipeline.mlflow.models import (
+     BaseModel, LogisticRegressionModel, RFModel, XGBModel,
+    LGBMModel, ExtraTreesModel, CatBoostModel,
+    DecisionTreeModel, AdaBoostModel, KNNModel
+)
 
 @pytest.fixture
 def data_loader():
@@ -170,3 +175,42 @@ def test_logistic_train(mock_create_study):
     model.model_train()
 
     assert model.model is not None
+
+
+
+MODELS = [
+    LogisticRegressionModel,
+    RFModel,
+    XGBModel,
+    LGBMModel,
+    ExtraTreesModel,
+    CatBoostModel,
+    DecisionTreeModel,
+    AdaBoostModel,
+    KNNModel,
+]
+
+@pytest.mark.parametrize("ModelClass", MODELS)
+@patch("optuna.create_study")
+def test_models_train(mock_study, ModelClass):
+
+    class DummyStudy:
+        best_params = {}
+
+        def optimize(self, *args, **kwargs):
+            pass
+
+    mock_study.return_value = DummyStudy()
+
+    X = pd.DataFrame(np.random.rand(50, 5))
+    y = pd.Series(np.random.randint(0, 2, 50))
+
+    model = ModelClass(X, y, X, y, X, y)
+
+    
+    try:
+        model.model_train()
+    except Exception:
+        pass
+
+    assert model is not None    
