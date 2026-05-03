@@ -15,5 +15,3 @@ mlflow.db
 models/
 .out.tfevents
 mlflow.db/
-ds/
-.log/
