@@ -15,19 +15,29 @@ def data_loader():
     return DataLoader()
 
 #proper MLflow disable (context manager)
-@pytest.fixture(autouse=True) #auto run this fixture when test is called
-def disable_mlflow(monkeypatch): # to disble mlflow function in real function
+@pytest.fixture(autouse=True)
+def disable_mlflow(monkeypatch):
     class DummyRun:
-        def __enter__(self): return self # context manager for enter nd cleaning
+        class info:
+            run_id = "dummy_run_id"         # ← needed for active_run().info.run_id
+        def __enter__(self): return self
         def __exit__(self, *args): pass
 
-    monkeypatch.setattr("mlflow.start_run", lambda *a, **k: DummyRun()) # any argument, keyword
+    monkeypatch.setattr("mlflow.set_tracking_uri", lambda *a, **k: None)
+    monkeypatch.setattr("mlflow.set_experiment", lambda *a, **k: None)
+    monkeypatch.setattr("mlflow.start_run", lambda *a, **k: DummyRun())
+    monkeypatch.setattr("mlflow.end_run", lambda *a, **k: None)
+    monkeypatch.setattr("mlflow.active_run", lambda *a, **k: DummyRun())  # ← for run_id
     monkeypatch.setattr("mlflow.log_param", lambda *a, **k: None)
     monkeypatch.setattr("mlflow.log_params", lambda *a, **k: None)
     monkeypatch.setattr("mlflow.log_metric", lambda *a, **k: None)
+    monkeypatch.setattr("mlflow.log_metrics", lambda *a, **k: None)
     monkeypatch.setattr("mlflow.set_tag", lambda *a, **k: None)
-    
-    
+    monkeypatch.setattr("mlflow.set_tags", lambda *a, **k: None)
+    monkeypatch.setattr("mlflow.log_artifact", lambda *a, **k: None)      # ← for plots/reports
+    monkeypatch.setattr("mlflow.log_artifacts", lambda *a, **k: None)
+    monkeypatch.setattr("mlflow.sklearn.log_model", lambda *a, **k: None) # ← model saving
+    monkeypatch.setattr("mlflow.register_model", lambda *a, **k: None)    # ← model registry
 # Data loading
 def test_load_data(data_loader):
     data_loader.load_data()
@@ -86,39 +96,24 @@ def test_feature_selection_applied_shape(data_loader):
 @patch.object(DataLoader, "run_dt")
 def test_pipeline_flow(mock_run):
     dl = DataLoader()
-    dl.run_experiment(
-        model_type=6,
-        smote=False,
-        feature_selection="spearman",
-        version=1,
-        k=5
-    )
+    dl.run_experiment(model_type=6, smote=False,
+                      feature_selection="spearman", version=1, k=5)
     assert mock_run.called
 
 
 @patch.object(DataLoader, "run_dt")
 def test_selected_features_used(mock_run):
     dl = DataLoader()
-    dl.run_experiment(
-        model_type=6,
-        smote=False,
-        feature_selection="spearman",
-        version=1,
-        k=5
-    )
+    dl.run_experiment(model_type=6, smote=False,
+                      feature_selection="spearman", version=1, k=5)
     assert dl.X_train.shape[1] == 5
 
 
 @patch.object(DataLoader, "run_dt")
 def test_feature_consistency_between_sets_features(mock_run):
     dl = DataLoader()
-    dl.run_experiment(
-        model_type=6,
-        smote=False,
-        feature_selection="spearman",
-        version=1,
-        k=5
-    )
+    dl.run_experiment(model_type=6, smote=False,
+                      feature_selection="spearman", version=1, k=5)
     assert list(dl.X_train.columns) == list(dl.X_val.columns)
     assert list(dl.X_train.columns) == list(dl.X_test.columns)
 
@@ -126,16 +121,10 @@ def test_feature_consistency_between_sets_features(mock_run):
 @patch.object(DataLoader, "run_dt")
 def test_intersect_feature_selection(mock_run):
     dl = DataLoader()
-    dl.run_experiment(
-        model_type=6,
-        smote=False,
-        feature_selection="intersect",
-        version=1,
-        k=5
-    )
+    dl.run_experiment(model_type=6, smote=False,
+                      feature_selection="intersect", version=1, k=5)
     assert dl.X_train.shape[1] <= 5
-
-
+    
 def test_invalid_model_type():
     dl = DataLoader()
     with pytest.raises(KeyError):
@@ -146,20 +135,6 @@ def test_invalid_model_type():
             version=1,
             k=5
         )
-
-
-# ================= MLflow =================
-
-# def test_mlflow_tags(data_loader):
-#     data_loader.run_experiment(
-#         model_type=6,
-#         smote=False,
-#         feature_selection="spearman",
-#         version=2,
-#         k=5
-#     )
-#     # ✔ MLflow already disabled globally → no need for patch
-#     # assert True
 
 
 # ================= BaseModel =================
