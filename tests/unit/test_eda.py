@@ -7,7 +7,15 @@ warnings.filterwarnings("ignore")
 import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
+
+import matplotlib.pyplot as plt
 import pytest
+
+@pytest.fixture(autouse=True)
+def close_plots():
+    yield
+    plt.close("all")
+
 #Local
 from src.pipeline.eda import EDA
 from src.pipeline.config import (
@@ -93,6 +101,26 @@ def test_pie_chart_runs(transformed_df):
     mapping_dict = dict(enumerate(eda.mapping["SEX"]))
     eda.apply_pie_chart("SEX", mapping_dict)
 
+def test_continuous_vs_continuous_runs(transformed_df):
+    eda.full_df_transformed = transformed_df
+    eda.continuous_vs_continuous_eda("LIMIT_BAL", "AGE")
+
+def test_continuous_vs_discrete_runs(transformed_df):
+    eda.full_df_transformed = transformed_df
+    eda.continuous_versus_discrete_eda("LIMIT_BAL")
+
+def test_discrete_vs_target_runs(transformed_df):
+    eda.full_df_transformed = transformed_df
+    eda.discrete_versus_target_stacked("default payment next month")
+
+def test_dashboard_after_smote_runs(transformed_df):
+    eda.full_df_transformed = transformed_df
+    eda.draw_dashboard_after_smote()
+
+def test_dashboard_before_smote_runs(transformed_df):
+    eda.full_df_transformed_without_smote = transformed_df
+    eda.draw_dashboard_before_smote()
+        
 def test_correlation_matrix_shape(transformed_df):    
     corr = transformed_df.corr()
     assert corr.shape[0] == corr.shape[1]  
