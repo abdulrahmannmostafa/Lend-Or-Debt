@@ -61,12 +61,12 @@ class EDA:
             "is_underpaying",
         ]
         self.mapping = {
-            "default payment next month": ["No Default", "Default"],
-            "SEX": ["Male", "Female"],
-            "MARRIAGE": ["married", "single", "other"],
-            "EDUCATION": ["graduate", "university", "high school", "other"],
-            "is_anomaly": ["Normal", "Anomaly"],
-            "is_underpaying": ["not_underpaying", "is_underpaying"],
+            "default payment next month": {0: "No Default", 1: "Default"},
+            "SEX": {1: "Male", 2: "Female"},
+            "MARRIAGE": {1: "married", 2: "single", 3: "other"},
+            "EDUCATION": {1: "graduate", 2: "university", 3: "high school", 4: "other"},
+            "is_anomaly": {0: "Normal", 1: "Anomaly"},
+            "is_underpaying": {0: "not_underpaying", 1: "is_underpaying"},
         }
         self.continuous_features = [
             "LIMIT_BAL",

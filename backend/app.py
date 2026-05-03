@@ -250,15 +250,29 @@ def eda_pie():
 
     mapping = eda.mapping.get(feature)
 
-    if isinstance(mapping, list):
-        mapping = {i: v for i, v in enumerate(mapping)}
-
-    if mapping is None:
+    if isinstance(mapping, dict):
+        pie_mapping = mapping
+    elif isinstance(mapping, list):
+        if feature == "default payment next month":
+            pie_mapping = {0: mapping[0], 1: mapping[1]}
+        elif feature == "SEX":
+            pie_mapping = {1: mapping[0], 2: mapping[1]}
+        elif feature == "MARRIAGE":
+            pie_mapping = {1: mapping[0], 2: mapping[1], 3: mapping[2]}
+        elif feature == "EDUCATION":
+            pie_mapping = {1: mapping[0], 2: mapping[1], 3: mapping[2], 4: mapping[3]}
+        elif feature == "is_anomaly":
+            pie_mapping = {0: mapping[0], 1: mapping[1]}
+        elif feature == "is_underpaying":
+            pie_mapping = {0: mapping[0], 1: mapping[1]}
+        else:
+            pie_mapping = {i: v for i, v in enumerate(mapping)}
+    else:
         df = eda.full_df_cleaned if data_type == 1 else eda.full_df_transformed
-        mapping = {v: str(v) for v in sorted(df[feature].dropna().unique())}
+        pie_mapping = {v: str(v) for v in sorted(df[feature].dropna().unique())}
 
     plt.close("all")
-    eda.apply_pie_chart(feature=feature, mapping=mapping, data_type=data_type)
+    eda.apply_pie_chart(feature=feature, mapping=pie_mapping, data_type=data_type)
     return jsonify({"image": capture_fig()})
 
 
