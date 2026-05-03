@@ -228,13 +228,6 @@ def clean_data(
 
 
 if __name__ == "__main__":
-    clean_data(
-        input_path="data/taiwan_merged.csv",
-        train_output="data/clean/train_cleaned.csv",
-        val_output="data/clean/val_cleaned.csv",
-        test_output="data/clean/test_cleaned.csv",
-    )
-if __name__ != "__main__":
     try:
         if Path("data/taiwan_merged.csv").exists():
             clean_data(
@@ -243,5 +236,7 @@ if __name__ != "__main__":
                 val_output="data/clean/val_cleaned.csv",
                 test_output="data/clean/test_cleaned.csv",
             )
+        else:
+            log.warning("Input file not found for standalone run.")
     except Exception as _e:
-        log.warning("Auto-run during import failed: %s", _e)
+        log.warning("Standalone run failed: %s", _e)
