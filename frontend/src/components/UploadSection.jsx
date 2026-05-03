@@ -24,10 +24,7 @@ export function UploadSection() {
     <div className="card">
       <h2>📂 Upload Raw Dataset</h2>
       <p>
-        Upload the raw CSV to run cleaning and transformation on. It will be saved as{" "}
-        <code style={{ background: "#f3f3f3", padding: "1px 5px", borderRadius: 4, fontSize: ".8rem" }}>
-          {RAW_INPUT_PATH}
-        </code>.
+        Upload the raw CSV to run cleaning and transformation on.
       </p>
 
       <div

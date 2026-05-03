@@ -4,14 +4,14 @@ import os
 # ── path setup: add project root so src.pipeline.* is importable ──────────────
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, PROJECT_ROOT)
+sys.path.insert(0, PROJECT_ROOT) # - > this means look in my project root first when importing modules
 import io
 import base64
 import logging
 import traceback
 
 import matplotlib
-matplotlib.use("Agg")
+matplotlib.use("Agg") # - > for generating plots as images without needing to display it (save them in memory )
 import matplotlib.pyplot as plt
 
 from flask import Flask, request, jsonify
@@ -22,7 +22,7 @@ from src.pipeline.data_transformation import run_transformation
 
 
 app = Flask(__name__)
-CORS(app)
+CORS(app) # allow requests from other domains
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -35,17 +35,20 @@ _uploaded_input_path: str | None = None
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 def fig_to_base64(fig) -> str:
+    # save the figure that is generated from matplot int o buf which is bytes and then encode it to base64 to send it to the frontend
+    # dpi means the res of image, bbox_inches="tight" means to fit the image tightly around the content.
+    # facecolor = background color
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=120, bbox_inches="tight",
                 facecolor=fig.get_facecolor())
     buf.seek(0)
     encoded = base64.b64encode(buf.read()).decode("utf-8")
-    plt.close(fig)
+    plt.close(fig) # free up memory by closing the figure after encoding
     return encoded
 
 
 def capture_fig() -> str:
-    """Grab whatever plt just drew, encode as base64, then close."""
+    """Grab whatever plt just drew, encode as base64, then return it."""
     fig = plt.gcf()
     return fig_to_base64(fig)
 
@@ -93,9 +96,10 @@ def run_cleaning():
     val_out   = os.path.join(PROJECT_ROOT, "data", "clean", "val_cleaned.csv")
     test_out  = os.path.join(PROJECT_ROOT, "data", "clean", "test_cleaned.csv")
 
-    log_capture = io.StringIO()
-    handler = logging.StreamHandler(log_capture)
-    logging.getLogger().addHandler(handler)
+
+    log_capture = io.StringIO()  # capture logs in a string buffer
+    handler = logging.StreamHandler(log_capture) # create a logging handler that writes to the string buffer
+    logging.getLogger().addHandler(handler) # change the destination of the loggger to the des of the string buffer
 
     try:
         clean_data(
@@ -104,7 +108,7 @@ def run_cleaning():
             val_output=val_out,
             test_output=test_out,
         )
-        logging.getLogger().removeHandler(handler)
+        logging.getLogger().removeHandler(handler) # free up memory
         return jsonify({
             "returncode": 0,
             "stdout": log_capture.getvalue(),
@@ -112,7 +116,7 @@ def run_cleaning():
             "success": True,
         })
     except Exception:
-        logging.getLogger().removeHandler(handler)
+        logging.getLogger().removeHandler(handler) # free up memory
         return jsonify({
             "returncode": 1,
             "stdout": log_capture.getvalue(),
@@ -287,11 +291,7 @@ def eda_continuous():
     feature_2 = body.get("feature_2")
 
     if not feature_1 or not feature_2:
-        transformed = eda.full_df_transformed.columns if eda.full_df_transformed is not None else []
-        available_features = [c for c in transformed if c not in eda.discrete_features]
-        if len(available_features) < 2:
-            return jsonify({"error": "Need at least two continuous features"}), 400
-        feature_1, feature_2 = available_features[:2]
+        return jsonify({"error": "feature_1 and feature_2 are required"}), 400
 
     plt.close("all")
     eda.continuous_vs_continuous_eda(feature_1, feature_2)
@@ -310,7 +310,7 @@ def eda_discrete_vs_continuous():
     if not feature:
         return jsonify({"error": "feature is required"}), 400
 
-    plt.close("all")
+    plt.close("all") # close everything drawn to free up memory
     eda.continuous_versus_discrete_eda(feature=feature)
     return jsonify({"image": capture_fig()})
 
@@ -378,7 +378,8 @@ def eda_dashboard_without_smote():
         return jsonify({"error": f"Image not found at {image_path}"}), 404
 
     with open(image_path, "rb") as img_file:
-        encoded = base64.b64encode(img_file.read()).decode("utf-8")
+        encoded = base64.b64encode(img_file.read()).decode("utf-8") # convert it into text so it can be sent over api 
+        # first we convert the binary to base64 then to characters
 
     return jsonify({"image": encoded})
 
