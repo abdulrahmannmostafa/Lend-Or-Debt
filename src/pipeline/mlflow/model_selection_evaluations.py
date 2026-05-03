@@ -3,8 +3,11 @@ import matplotlib.pyplot as plt
 import mlflow
 import pandas as pd
 from loguru import logger
-
+import argparse
 from src.pipeline.config import (
+    test_transformed_path,
+    train_transformed_path,
+    val_transformed_path,
     test_transformed_path_without_smote,
     train_transformed_path_without_smote,
     val_transformed_path_without_smote,
@@ -31,10 +34,15 @@ class DataLoader:
     def __init__(self):
         self.feature_extractor = FeatureExtractor()
 
-    def load_data(self):
-        self.train_data = pd.read_csv(train_transformed_path_without_smote)
-        self.validation_data = pd.read_csv(val_transformed_path_without_smote)
-        self.test_data = pd.read_csv(test_transformed_path_without_smote)
+    def load_data(self, SMOTE_FLAG=0):
+        if SMOTE_FLAG:
+            self.train_data = pd.read_csv(train_transformed_path)
+            self.validation_data = pd.read_csv(val_transformed_path)
+            self.test_data = pd.read_csv(test_transformed_path)
+        else:
+            self.train_data = pd.read_csv(train_transformed_path_without_smote)
+            self.validation_data = pd.read_csv(val_transformed_path_without_smote)
+            self.test_data = pd.read_csv(test_transformed_path_without_smote)
 
         target = "default payment next month"
 
@@ -132,7 +140,7 @@ class DataLoader:
         self, model_type, smote=True, feature_selection="spearman", version=1, k=20
     ):
         logger.info("Loading dataset")
-        self.load_data()
+        self.load_data(SMOTE_FLAG=smote)
         logger.info("Preparing features")
         self.prepare_features()
 
@@ -179,49 +187,31 @@ class DataLoader:
             mlflow.log_param("version", version)
 
 
-def main():
-
+def run_model_selection_training(
+    model_type=6, smote=False, feature_selection="spearman", version=4, k=20
+):
     dl = DataLoader()
     dl.run_experiment(
-        model_type=6, smote=False, feature_selection="spearman", version=4, k=20
-    )
-    dl.run_experiment(
-        model_type=6, smote=False, feature_selection="mutual_info", version=5, k=20
-    )
-    dl.run_experiment(
-        model_type=6, smote=False, feature_selection="intersect", version=6, k=25
-    )
-
-    dl.run_experiment(
-        model_type=7, smote=False, feature_selection="spearman", version=4, k=20
-    )
-    dl.run_experiment(
-        model_type=7, smote=False, feature_selection="mutual_info", version=5, k=20
-    )
-    dl.run_experiment(
-        model_type=7, smote=False, feature_selection="intersect", version=6, k=25
-    )
-
-    dl.run_experiment(
-        model_type=8, smote=False, feature_selection="spearman", version=4, k=20
-    )
-    dl.run_experiment(
-        model_type=8, smote=False, feature_selection="mutual_info", version=5, k=20
-    )
-    dl.run_experiment(
-        model_type=8, smote=False, feature_selection="intersect", version=6, k=25
-    )
-
-    dl.run_experiment(
-        model_type=9, smote=False, feature_selection="spearman", version=4, k=20
-    )
-    dl.run_experiment(
-        model_type=9, smote=False, feature_selection="mutual_info", version=5, k=20
-    )
-    dl.run_experiment(
-        model_type=9, smote=False, feature_selection="intersect", version=6, k=25
+        model_type=model_type,
+        smote=smote,
+        feature_selection=feature_selection,
+        version=version,
+        k=k,
     )
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model_type", type=int, default=6)
+    parser.add_argument("--smote", type=int, default=0)
+    parser.add_argument("--feature_selection", type=str, default="spearman")
+    parser.add_argument("--version", type=int, default=4)
+    parser.add_argument("--k", type=int, default=20)
+    args = parser.parse_args()
+    run_model_selection_training(
+        model_type=args.model_type,
+        smote=bool(args.smote),
+        feature_selection=args.feature_selection,
+        version=args.version,
+        k=args.k,
+    )
