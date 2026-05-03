@@ -730,14 +730,16 @@ class LGBMModel(BaseModel):
         mlflow.log_param("scale_pos_weight", self.scale_pos_weight)
         self.cross_validate()
         logger.success("Training done")
+
     def plot_feature_importance(self, model_name="lgbm", top_n=15):
         importances = self.model.feature_importances_
         features = self.X_train.columns
-        
-        fi_df = pd.DataFrame({
-            "feature": features,
-            "importance": importances
-        }).sort_values("importance", ascending=False).head(top_n)
+
+        fi_df = (
+            pd.DataFrame({"feature": features, "importance": importances})
+            .sort_values("importance", ascending=False)
+            .head(top_n)
+        )
 
         path = f"/tmp/feature_importance_{model_name}.png"
         plt.figure(figsize=(10, 6))
@@ -749,6 +751,7 @@ class LGBMModel(BaseModel):
         plt.close()
         mlflow.log_artifact(path, artifact_path="plots")
         os.remove(path)
+
     def model_predict(self):
         logger.info("Predicting LightGBM")
         proba = self.model.predict_proba(self.X_test)[:, 1]
