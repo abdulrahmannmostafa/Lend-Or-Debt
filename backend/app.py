@@ -121,6 +121,21 @@ def run_cleaning():
         }), 500
 
 
+
+#-- debug
+
+@app.route("/api/debug", methods=["GET"])
+def debug():
+    return jsonify({
+        "PROJECT_ROOT": PROJECT_ROOT,
+        "uploaded_input_path": _uploaded_input_path,
+        "clean_train_exists": os.path.exists(os.path.join(PROJECT_ROOT, "data/clean/train_cleaned.csv")),
+        "transformed_train_exists": os.path.exists(os.path.join(PROJECT_ROOT, "data/transformed/train_transformed.csv")),
+        "eda_initialised": _eda_instance is not None,
+        "eda_train_shape": str(_eda_instance.full_df_cleaned.shape) if _eda_instance and _eda_instance.full_df_cleaned is not None else None,
+    })
+
+
 # ── TRANSFORMATION — calls run_transformation() directly with cleaned paths ────
 @app.route("/api/run/transformation", methods=["POST"])
 def run_transformation_route():
