@@ -7,8 +7,8 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, PROJECT_ROOT)
 import io
 import base64
-import subprocess
 import logging
+import traceback
 
 import matplotlib
 matplotlib.use("Agg")
@@ -16,9 +16,9 @@ import matplotlib.pyplot as plt
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from src.pipeline.eda import EDA 
-
-
+from src.pipeline.eda import EDA
+from src.pipeline.data_cleaning import clean_data
+from src.pipeline.data_transformation import run_transformation
 
 
 app = Flask(__name__)
@@ -28,6 +28,9 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 _eda_instance: EDA | None = None
+
+# ── tracks the uploaded raw input path so cleaning/transform use it ───────────
+_uploaded_input_path: str | None = None
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -50,54 +53,122 @@ def capture_fig() -> str:
 # ── UPLOAD ────────────────────────────────────────────────────────────────────
 @app.route("/api/upload", methods=["POST"])
 def upload_file():
+    global _uploaded_input_path
+
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
 
     file = request.files["file"]
-    # dest is a relative path inside the project, e.g. "data/clean/train_cleaned.csv"
-    dest = request.form.get("dest", "")
-    if not dest:
-        return jsonify({"error": "Must provide 'dest' — relative path inside project root"}), 400
 
-    save_path = os.path.join(PROJECT_ROOT, dest)
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    # Save the raw uploaded CSV into data/raw/ inside the project
+    save_dir = os.path.join(PROJECT_ROOT, "data", "raw")
+    os.makedirs(save_dir, exist_ok=True)
+    save_path = os.path.join(save_dir, file.filename)
     file.save(save_path)
 
-    return jsonify({"message": f"Saved to {dest}", "path": save_path})
+    # Remember the path so cleaning/transformation use it
+    _uploaded_input_path = save_path
+    log.info("Uploaded raw file saved to: %s", save_path)
+
+    return jsonify({"message": f"Uploaded '{file.filename}' successfully.", "path": save_path})
 
 
-# ── CLEANING — runs __main__ of data_cleaning.py ──────────────────────────────
+# ── CLEANING — calls clean_data() directly with the uploaded file path ─────────
 @app.route("/api/run/cleaning", methods=["POST"])
 def run_cleaning():
-    result = subprocess.run(
-        [sys.executable, "-m", "src.pipeline.data_cleaning"],
-        cwd=PROJECT_ROOT,
-        capture_output=True,
-        text=True,
-    )
-    return jsonify({
-        "returncode": result.returncode,
-        "stdout": result.stdout,
-        "stderr": result.stderr,
-        "success": result.returncode == 0,
-    })
+    global _uploaded_input_path
+
+    # Use uploaded file if available, otherwise fall back to the default path
+    input_path = _uploaded_input_path or os.path.join(PROJECT_ROOT, "data", "taiwan_merged.csv")
+
+    if not os.path.exists(input_path):
+        return jsonify({
+            "returncode": 1,
+            "stdout": "",
+            "stderr": f"Input file not found: {input_path}. Please upload a CSV first.",
+            "success": False,
+        }), 400
+
+    train_out = os.path.join(PROJECT_ROOT, "data", "clean", "train_cleaned.csv")
+    val_out   = os.path.join(PROJECT_ROOT, "data", "clean", "val_cleaned.csv")
+    test_out  = os.path.join(PROJECT_ROOT, "data", "clean", "test_cleaned.csv")
+
+    log_capture = io.StringIO()
+    handler = logging.StreamHandler(log_capture)
+    logging.getLogger().addHandler(handler)
+
+    try:
+        clean_data(
+            input_path=input_path,
+            train_output=train_out,
+            val_output=val_out,
+            test_output=test_out,
+        )
+        logging.getLogger().removeHandler(handler)
+        return jsonify({
+            "returncode": 0,
+            "stdout": log_capture.getvalue(),
+            "stderr": "",
+            "success": True,
+        })
+    except Exception:
+        logging.getLogger().removeHandler(handler)
+        return jsonify({
+            "returncode": 1,
+            "stdout": log_capture.getvalue(),
+            "stderr": traceback.format_exc(),
+            "success": False,
+        }), 500
 
 
-# ── TRANSFORMATION — runs __main__ of data_transformation.py ─────────────────
+# ── TRANSFORMATION — calls run_transformation() directly with cleaned paths ────
 @app.route("/api/run/transformation", methods=["POST"])
-def run_transformation():
-    result = subprocess.run(
-        [sys.executable, "-m", "src.pipeline.data_transformation"],
-        cwd=PROJECT_ROOT,
-        capture_output=True,
-        text=True,
-    )
-    return jsonify({
-        "returncode": result.returncode,
-        "stdout": result.stdout,
-        "stderr": result.stderr,
-        "success": result.returncode == 0,
-    })
+def run_transformation_route():
+    train_in = os.path.join(PROJECT_ROOT, "data", "clean", "train_cleaned.csv")
+    val_in   = os.path.join(PROJECT_ROOT, "data", "clean", "val_cleaned.csv")
+    test_in  = os.path.join(PROJECT_ROOT, "data", "clean", "test_cleaned.csv")
+
+    missing = [p for p in [train_in, val_in, test_in] if not os.path.exists(p)]
+    if missing:
+        return jsonify({
+            "returncode": 1,
+            "stdout": "",
+            "stderr": f"Cleaned files not found: {missing}. Run Data Cleaning first.",
+            "success": False,
+        }), 400
+
+    train_out = os.path.join(PROJECT_ROOT, "data", "transformed", "train_transformed.csv")
+    val_out   = os.path.join(PROJECT_ROOT, "data", "transformed", "val_transformed.csv")
+    test_out  = os.path.join(PROJECT_ROOT, "data", "transformed", "test_transformed.csv")
+
+    log_capture = io.StringIO()
+    handler = logging.StreamHandler(log_capture)
+    logging.getLogger().addHandler(handler)
+
+    try:
+        run_transformation(
+            train_input=train_in,
+            val_input=val_in,
+            test_input=test_in,
+            train_output=train_out,
+            val_output=val_out,
+            test_output=test_out,
+        )
+        logging.getLogger().removeHandler(handler)
+        return jsonify({
+            "returncode": 0,
+            "stdout": log_capture.getvalue(),
+            "stderr": "",
+            "success": True,
+        })
+    except Exception:
+        logging.getLogger().removeHandler(handler)
+        return jsonify({
+            "returncode": 1,
+            "stdout": log_capture.getvalue(),
+            "stderr": traceback.format_exc(),
+            "success": False,
+        }), 500
 
 
 # ── EDA — initialise the EDA instance ────────────────────────────────────────
@@ -142,7 +213,7 @@ def eda_univariate():
 
     body      = request.json or {}
     column    = body.get("column")
-    data_type = int(body.get("data_type", 0))   # 0=transformed, 1=cleaned , 2=transformed without smote
+    data_type = int(body.get("data_type", 0))
 
     if not column:
         return jsonify({"error": "column is required"}), 400
@@ -164,11 +235,9 @@ def eda_pie():
 
     mapping = eda.mapping.get(feature)
 
-    # convert list → dict if needed
     if isinstance(mapping, list):
         mapping = {i: v for i, v in enumerate(mapping)}
 
-    # fallback if no mapping exists
     if mapping is None:
         df = eda.full_df_cleaned if data_type == 1 else eda.full_df_transformed
         mapping = {v: str(v) for v in sorted(df[feature].dropna().unique())}
@@ -252,41 +321,41 @@ def eda_columns():
     if err: return err
 
     return jsonify({
-        "cleaned":          list(eda.full_df_cleaned.columns)     if eda.full_df_cleaned     is not None else [],
-        "transformed":      list(eda.full_df_transformed.columns) if eda.full_df_transformed is not None else [],
+        "cleaned":           list(eda.full_df_cleaned.columns)     if eda.full_df_cleaned     is not None else [],
+        "transformed":       list(eda.full_df_transformed.columns) if eda.full_df_transformed is not None else [],
         "discrete_features": eda.discrete_features,
         "mapping":           list(eda.mapping.keys()),
         "continuous_features": eda.continuous_features,
     })
 
 
-
-# ── EDA: dashboard_with_smote ───────────────────────────────────────────────────────
+# ── EDA: dashboard_with_smote ─────────────────────────────────────────────────
 @app.route("/api/eda/dashboard_with_smote", methods=["POST"])
 def eda_dashboard_with_smote():
     image_path = os.path.join(PROJECT_ROOT, "dashboard_with_smotes.png")
-    
+
     if not os.path.exists(image_path):
         return jsonify({"error": f"Image not found at {image_path}"}), 404
-    
+
     with open(image_path, "rb") as img_file:
         encoded = base64.b64encode(img_file.read()).decode("utf-8")
-    
+
     return jsonify({"image": encoded})
 
 
-# ── EDA: dashboard_without_smote ───────────────────────────────────────────────────────
+# ── EDA: dashboard_without_smote ──────────────────────────────────────────────
 @app.route("/api/eda/dashboard_without_smote", methods=["POST"])
 def eda_dashboard_without_smote():
     image_path = os.path.join(PROJECT_ROOT, "dashboard_without_smotes.png")
-    
+
     if not os.path.exists(image_path):
         return jsonify({"error": f"Image not found at {image_path}"}), 404
-    
+
     with open(image_path, "rb") as img_file:
         encoded = base64.b64encode(img_file.read()).decode("utf-8")
-    
+
     return jsonify({"image": encoded})
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))

@@ -229,9 +229,9 @@ def clean_data(
 
 if __name__ == "__main__":
     try:
-        if Path("data/taiwan_merged1.csv").exists():
+        if Path("data/taiwan_merged.csv").exists():
             clean_data(
-                input_path="data/taiwan_merged1.csv",
+                input_path="data/taiwan_merged.csv",
                 train_output="data/clean/train_cleaned.csv",
                 val_output="data/clean/val_cleaned.csv",
                 test_output="data/clean/test_cleaned.csv",
