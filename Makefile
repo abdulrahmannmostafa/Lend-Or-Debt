@@ -1,10 +1,12 @@
 .PHONY: scrape merge validate all help
 
 help:
-	@echo "Available commands:"
-	@echo "  make acquisition - Run all data acquisition scripts in order"
-	@echo "  make validation  - Run the validation pipeline"
-	@echo "  make pipeline    - Run the full pipeline of all phases"
+    @echo "Available commands:"
+    @echo "  make acquisition                    - Run data acquisition"
+    @echo "  make validation                     - Run data validation"
+    @echo "  make pipeline                       - Run full pipeline (all phases)"
+	@echo "  make eda                       - Run eda"
+    @echo "  make modeling_selection model=6 smote=0 fs=spearman ver=4 k=20"
 
 lint:
 	@echo ">>> Running code linting..."
@@ -43,7 +45,7 @@ validation:
 eda:
 	@echo ">>> Running data validation script..."
 	poetry run python -m src.pipeline.eda
-	@echo ">>> Data validation is completed"
+	@echo ">>> Data EDA is completed"
 
 cleaning:
 	@echo ">>> Running data cleaning script..."
@@ -54,6 +56,10 @@ transformation:
 	@echo ">>> Running data transformation script..."
 	poetry run python -m src.pipeline.data_transformation
 	@echo ">>> Data transformation is completed"
+modeling_selection:
+	@echo ">>> Running data modeling script..."
+	poetry run python -m src.pipeline.mlflow.model_selection_evaluations --model_type=$(model) --smote=$(smote) --feature_selection=$(fs) --version=$(ver) --k=$(k)
+	@echo ">>> Modeling is completed"
 
 pipeline:
 	@echo ">>> Full pipeline of all phases"

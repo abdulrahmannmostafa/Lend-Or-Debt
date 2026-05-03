@@ -1517,5 +1517,3 @@ if __name__ != "__main__":
             )
     except Exception as e:
         logger.warning(f"Auto-eda failed during import: {e}")
-
-        logger.warning(f"Auto-eda failed during import: {e}")
