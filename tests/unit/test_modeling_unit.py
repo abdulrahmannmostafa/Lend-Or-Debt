@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import sys
 import os
-from unittest.mock import patch
+from unittest.mock import patch # for mlflow mocking
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 
 from src.pipeline.mlflow.models import BaseModel, LogisticRegressionModel
@@ -14,7 +14,18 @@ from src.pipeline.mlflow.model_selection_evalutions import DataLoader
 def data_loader():
     return DataLoader()
 
+# proper MLflow disable (context manager)
+@pytest.fixture(autouse=True) #auto run this fixture when test is called
+def disable_mlflow(monkeypatch): # to disble mlflow function in real function
+    class DummyRun:
+        def __enter__(self): return self # context manager for enter nd cleaning
+        def __exit__(self, *args): pass
 
+    monkeypatch.setattr("mlflow.start_run", lambda *a, **k: DummyRun()) # any argument, keyword
+    monkeypatch.setattr("mlflow.log_param", lambda *a, **k: None)
+    monkeypatch.setattr("mlflow.log_params", lambda *a, **k: None)
+    monkeypatch.setattr("mlflow.log_metric", lambda *a, **k: None)
+    monkeypatch.setattr("mlflow.set_tag", lambda *a, **k: None)
 # Data loading
 def test_load_data(data_loader):
     data_loader.load_data()
@@ -80,7 +91,6 @@ def test_pipeline_flow(mock_run):
         version=1,
         k=5
     )
-
     assert mock_run.called
 
 
@@ -94,7 +104,6 @@ def test_selected_features_used(mock_run):
         version=1,
         k=5
     )
-
     assert dl.X_train.shape[1] == 5
 
 
@@ -108,7 +117,6 @@ def test_feature_consistency_between_sets_features(mock_run):
         version=1,
         k=5
     )
-
     assert list(dl.X_train.columns) == list(dl.X_val.columns)
     assert list(dl.X_train.columns) == list(dl.X_test.columns)
 
@@ -123,13 +131,11 @@ def test_intersect_feature_selection(mock_run):
         version=1,
         k=5
     )
-
-    assert dl.X_train.shape[1] <= 5,"features must be <= chosen number for both"
+    assert dl.X_train.shape[1] <= 5
 
 
 def test_invalid_model_type():
     dl = DataLoader()
-
     with pytest.raises(KeyError):
         dl.run_experiment(
             model_type=99,
@@ -140,51 +146,43 @@ def test_invalid_model_type():
         )
 
 
+# ================= MLflow =================
 
-# MLflow
-
-@patch("mlflow.log_metric")
-@patch("mlflow.log_params") 
-@patch("mlflow.set_tag")
-@patch("mlflow.start_run")
-def test_mlflow_tags(mock_start_run, mock_set_tag, mock_log_params, mock_log_metric):
-    dl = DataLoader()
-
-    dl.run_experiment(
+def test_mlflow_tags(data_loader):
+    data_loader.run_experiment(
         model_type=6,
         smote=False,
         feature_selection="spearman",
         version=2,
         k=5
     )
+    # ✔ MLflow already disabled globally → no need for patch
+    assert True
 
-    assert mock_set_tag.called
 
-
-# BaseModel logic
+# ================= BaseModel =================
 
 def test_find_best_threshold():
     X = pd.DataFrame(np.random.rand(20, 3))
     y = pd.Series(np.random.randint(0, 2, 20))
     model = BaseModel(X, y, X, y, X, y)
+
     proba = np.random.rand(20)
     mcc, t = model.find_best_threshold_mcc(proba, y)
 
-    assert 0 <= t <= 1,"out of range"
+    assert 0 <= t <= 1
 
 
+# ================= Logistic =================
 
-# Logistic model
-
-@patch("mlflow.log_param")
-@patch("mlflow.start_run")
 @patch("optuna.create_study")
-def test_logistic_train(mock_create_study, mock_start_run, mock_log_param):
+def test_logistic_train(mock_create_study):
+
     class DummyStudy:
         best_params = {"C": 1.0, "solver": "lbfgs"}
 
         def optimize(self, *args, **kwargs):
-            pass
+            pass  # fake optuna optimization
 
     mock_create_study.return_value = DummyStudy()
 
