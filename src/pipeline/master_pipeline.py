@@ -7,6 +7,7 @@ import time
 from src.pipeline.data_acquisition import run_acquisition  # Phase 1
 from src.pipeline.data_validation import run_validation  # Phase 2
 from src.pipeline.eda import run_eda
+from src.pipeline.mlflow.model_selection_evaluations import run_model_selection_training
 from src.pipeline.data_cleaning import clean_data  # Phase 3  <- uncomment when ready
 from src.pipeline.data_transformation import (
     run_transformation,
@@ -81,12 +82,17 @@ _PHASES: list[dict] = [
             "test_input_transformed": "data/transformed/test_transformed.csv",
         },
     },
-    # Phase 5 — Model Training             (add when ready)
+    # Phase 6 — Model Training             (add when ready)
+    {
+        "name": "6 | Model Training and Selection",
+        "fn": run_model_selection_training,
+        "kwargs": {},
+    },
     # Phase 6 — Model Evaluation           (add when ready)
 ]
 
 
-def run_pipeline(start_from: int = 1) -> None:
+def run_pipeline(start_from: int = 1, model_kwargs=None) -> None:
     """
     Execute every registered phase in order
     """
@@ -116,7 +122,10 @@ def run_pipeline(start_from: int = 1) -> None:
         step_start = time.time()
 
         try:
-            phase["fn"](**phase["kwargs"])
+            if _phase_number(phase["name"]) == 6 and model_kwargs:
+                phase["fn"](**model_kwargs)
+            else:
+                phase["fn"](**phase["kwargs"])
             elapsed = time.time() - step_start
             log.info("  PHASE %s — completed in %.1fs", phase["name"], elapsed)
 
@@ -162,5 +171,19 @@ if __name__ == "__main__":
         metavar="N",
         help="Start from phase N (default: 1). Useful for resuming after a failure",
     )
+    parser.add_argument("--model_type", type=int, default=6)
+    parser.add_argument("--smote", type=int, default=0)
+    parser.add_argument("--feature_selection", type=str, default="spearman")
+    parser.add_argument("--version", type=int, default=1)
+    parser.add_argument("--k", type=int, default=20)
     args = parser.parse_args()
-    run_pipeline(start_from=args.start_from)
+    run_pipeline(
+        start_from=args.start_from,
+        model_kwargs={
+            "model_type": args.model_type,
+            "smote": bool(args.smote),
+            "feature_selection": args.feature_selection,
+            "version": args.version,
+            "k": args.k,
+        },
+    )

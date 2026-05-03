@@ -11,15 +11,11 @@ from src.scrape.parse_cbc_pdf import parse_cbc_rates
 from src.scrape.scrape_taiex import scrape_taiex
 from src.scrape.scrape_unemployment import scrape_unemployment
 
-# Paths
-# ============================================================================
 _THIS_DIR = Path(__file__).resolve().parent.parent
 _PROJECT_ROOT = _THIS_DIR.parent
 _DATA_DIR = _PROJECT_ROOT / "data"
 sys.path.insert(0, str(_THIS_DIR))
 
-# Logging
-# =============================================================================
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s",
@@ -37,10 +33,8 @@ DEFAULT_PATHS = {
 }
 
 
+# A wrapper function that runs any pipeline step with consistent logging and error handling
 def _step(name: str, fn, *args, **kwargs):
-    """
-    Run a single acquisition step, log timing, and surface any exception
-    """
     log.info("=" * 60)
     log.info("STEP: %s", name)
     log.info("=" * 60)
@@ -64,17 +58,13 @@ def run_acquisition(
     merged_path: str = DEFAULT_PATHS["merged"],
     fred_api_key: str | None = None,
 ) -> None:
-    """
-    Run the full data acquisition pipeline
-    """
-
     load_dotenv()
 
     api_key = fred_api_key or os.getenv("FRED_API_KEY")
     if not api_key:
         raise EnvironmentError(
-            "FRED_API_KEY is not set. "
-            "Add it to your .env file or pass fred_api_key= explicitly."
+            "FRED_API_KEY is not set "
+            "Add it to your .env file or pass fred_api_key= explicitly"
         )
 
     if not Path(taiwan_path).exists():

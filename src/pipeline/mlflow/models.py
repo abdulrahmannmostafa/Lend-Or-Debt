@@ -695,7 +695,7 @@ class LGBMModel(BaseModel):
 
     def objective_lgbm(self, trial):
         param = {
-            "n_estimators": trial.suggest_int("n_estimators", 100, 500),
+            "n_estimators": trial.suggest_int("n_estimators", 100, 120),
             "max_depth": trial.suggest_int("max_depth", 3, 10),
             "learning_rate": trial.suggest_float("learning_rate", 0.001, 0.3),
             "num_leaves": trial.suggest_int("num_leaves", 20, 150),
@@ -731,15 +731,39 @@ class LGBMModel(BaseModel):
         self.cross_validate()
         logger.success("Training done")
 
+    def plot_feature_importance(self, model_name="lgbm", top_n=15):
+        importances = self.model.feature_importances_
+        features = self.X_train.columns
+
+        fi_df = (
+            pd.DataFrame({"feature": features, "importance": importances})
+            .sort_values("importance", ascending=False)
+            .head(top_n)
+        )
+
+        path = f"/tmp/feature_importance_{model_name}.png"
+        plt.figure(figsize=(10, 6))
+        plt.barh(fi_df["feature"][::-1], fi_df["importance"][::-1])
+        plt.title(f"Top {top_n} Feature Importances - {model_name}")
+        plt.xlabel("Importance")
+        plt.tight_layout()
+        plt.savefig(path)
+        plt.close()
+        mlflow.log_artifact(path, artifact_path="plots")
+        os.remove(path)
+
     def model_predict(self):
         logger.info("Predicting LightGBM")
         proba = self.model.predict_proba(self.X_test)[:, 1]
         y_pred, cm, best_mcc, best_t = self.evaluate(proba)
+
         self.log_classification_report(y_pred, model_name="lgbm")
         self.log_error_analysis(y_pred, model_name="lgbm")
         self.plot_confusion_matrix(cm, model_name="lgbm")
         self.plot_roc(proba, model_name="lgbm")
         self.plot_learning_curve(model_name="lgbm")
+
+        self.plot_feature_importance(model_name="lgbm")
         self.log_and_register_model("lightgbm")
         logger.success(f"Done | MCC={best_mcc:.4f} | T={best_t}")
 
