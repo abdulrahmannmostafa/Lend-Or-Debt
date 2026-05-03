@@ -1,12 +1,12 @@
 .PHONY: scrape merge validate all help
 
 help:
-    @echo "Available commands:"
-    @echo "  make acquisition                    - Run data acquisition"
-    @echo "  make validation                     - Run data validation"
-    @echo "  make pipeline                       - Run full pipeline (all phases)"
-	@echo "  make eda                       - Run eda"
-    @echo "  make modeling_selection model=6 smote=0 fs=spearman ver=4 k=20"
+	@echo "Available commands:"
+	@echo "  make acquisition                    - Run data acquisition"
+	@echo "  make validation                     - Run data validation"
+	@echo "  make pipeline                       - Run full pipeline (all phases)"
+	@echo "  make eda                       	- Run eda"
+	@echo "  make modeling_selection model=6 smote=0 fs=spearman ver=4 k=20"
 
 lint:
 	@echo ">>> Running code linting..."
