@@ -1,15 +1,14 @@
 import logging
 import pandas as pd
 
-# Logging
-# ----------------------------------------------------------------------------
-
+# I made that script to combine Taiwan Credit Card dataset with the macroeconomic data from FRED, TAIEX, CBC and DGBAS to build a final CSV
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s",
 )
 log = logging.getLogger(__name__)
 
+# Mapper for the month panel construction: each tuple corresponds to one month and specifies the relevant columns for that month
 MONTH_PANEL = [
     (4, "PAY_6", "BILL_AMT6", "PAY_AMT6"),  # April 2005
     (5, "PAY_5", "BILL_AMT5", "PAY_AMT5"),  # May 2005
@@ -21,22 +20,19 @@ MONTH_PANEL = [
 
 
 def _load_taiwan(path: str) -> pd.DataFrame:
-    """
-    Load the UCI Taiwan credit card Excel file to a DataFrame
-    """
     log.info("Loading Taiwan dataset: %s", path)
 
-    df = pd.read_excel(
-        path, header=1
-    )  # To delete the first row which is a duplicate header row in the original file
-    df = df.reset_index(
-        drop=True
-    )  # Reset index to ensure positional alignment for panel building
+    # To delete the first row which is a duplicate header row in the original file
+    df = pd.read_excel(path, header=1)
 
-    if (
-        "ID" not in df.columns
-    ):  # We need ID for merging the dataset based on the panel mapping with the scrapped CSVs
+    # Reset index to ensure positional alignment for panel building
+    df = df.reset_index(drop=True)
+
+    # We need ID for merging the dataset based on the panel mapping with the scrapped CSVs for that we need to generate sequential IDs if not present
+    if "ID" not in df.columns:
         log.warning("No 'ID' column found — generating sequential IDs")
+
+        # Insert ID column at the front with sequential integers starting from 1
         df.insert(0, "ID", range(1, len(df) + 1))
 
     log.info("Taiwan loaded: %s rows × %s cols", *df.shape)
@@ -49,9 +45,6 @@ def _load_macro_sources(
     cbc_path: str,
     unemploy_path: str,
 ) -> tuple:
-    """
-    Load the four macro CSV files and return them as a tuple
-    """
     log.info("Loading macro sources...")
 
     macro = pd.read_csv(macro_path)  # FRED
@@ -59,18 +52,17 @@ def _load_macro_sources(
     cbc = pd.read_csv(cbc_path)  # CBC Annual Report
     unemploy = pd.read_csv(unemploy_path)  # DGBAS
 
-    log.info("FRED macro:    %s rows × %s cols", *macro.shape)
-    log.info("TAIEX:         %s rows × %s cols", *taiex.shape)
-    log.info("CBC rates:     %s rows × %s cols", *cbc.shape)
-    log.info("Unemployment:  %s rows × %s cols", *unemploy.shape)
+    log.info("FRED macro:    %s rows x %s cols", *macro.shape)
+    log.info("TAIEX:         %s rows x %s cols", *taiex.shape)
+    log.info("CBC rates:     %s rows x %s cols", *cbc.shape)
+    log.info("Unemployment:  %s rows x %s cols", *unemploy.shape)
 
     return macro, taiex, cbc, unemploy
 
 
+# I built that to convert the wide format of Taiwan dataset from having one row per borrower with multiple columns for each month
+# to a long format panel with one row per borrower per month
 def _build_panel(taiwan: pd.DataFrame) -> pd.DataFrame:
-    """
-    Melt the wide-format Taiwan dataset into a long format panel
-    """
     log.info("Building long-format panel...")
     records = []
 
@@ -87,13 +79,23 @@ def _build_panel(taiwan: pd.DataFrame) -> pd.DataFrame:
         )
         records.append(tmp)
 
+    # For each of the 6 months in MONTH_PANEL
+    # it creates a temporary DataFrame with the relevant columns, then stacks all 6 DataFrames vertically
+    # With 30,000 borrowers × 6 months = 180,000 rows
+
+    # ignore index to get a clean sequential index after concatenation like 0, 1, 2, ..., 179999
     panel = pd.concat(records, ignore_index=True)
+
+    # Sort by ID and Month to ensure the panel is ordered correctly for later processing
     panel = panel.sort_values(["ID", "Month"]).reset_index(drop=True)
 
     log.info("Panel built: %s rows x %s cols (expected 180,000 x 6)", *panel.shape)
     return panel
 
 
+# I built that to merge the macroeconomic data from FRED, TAIEX, CBC and DGBAS onto the long format panel based on the Year and Month columns
+# A left merge ensures all panel rows are kept even if a macro source has no matching month
+# Each merge adds new columns without dropping existing rows
 def _merge_macro(
     panel: pd.DataFrame,
     macro: pd.DataFrame,
@@ -101,9 +103,6 @@ def _merge_macro(
     cbc: pd.DataFrame,
     unemploy: pd.DataFrame,
 ) -> pd.DataFrame:
-    """
-    Merge all four macro sources onto the long-format panel using [Year, Month] as the join key
-    """
     log.info("Merging macro sources onto panel...")
 
     panel = panel.merge(
@@ -137,15 +136,9 @@ def _merge_macro(
     return panel
 
 
-# PAY_STATUS recoding
-# ---------------------------------------------------------------------------
-
-
+# The original PAY_STATUS column contains negative values (like -1, -2) that encode "paid on time" or "no consumption"
+# sets any negative value to 0, making the column purely numeric for aggregation because negative delinquency doesn't make mathematical sense
 def _recode_pay_status(panel: pd.DataFrame) -> pd.DataFrame:
-    """
-    Add PAY_STATUS_clean by clipping PAY_STATUS to a floor of 0
-
-    """
     panel = panel.copy()
     panel["PAY_STATUS_clean"] = panel["PAY_STATUS"].clip(
         lower=0
@@ -153,10 +146,8 @@ def _recode_pay_status(panel: pd.DataFrame) -> pd.DataFrame:
     return panel
 
 
+# I made this to collapse the long format panel back to one row per borrower by aggregating the monthly behaviour and macro features
 def _aggregate_behaviour(panel: pd.DataFrame) -> pd.DataFrame:
-    """
-    Aggregate the long-format panel back to one row per borrower
-    """
     log.info("Aggregating panel to borrower level...")
 
     agg = (
@@ -187,9 +178,6 @@ def build_final_dataset(
     unemploy_path: str = "../data/unemployment_2005.csv",
     save_path: str = "../data/taiwan_merged.csv",
 ) -> pd.DataFrame:
-    """
-    Data acquisition pipeline — builds and saves the raw merged dataset
-    """
 
     # Step 1
     taiwan = _load_taiwan(taiwan_path)
