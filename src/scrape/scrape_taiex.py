@@ -3,17 +3,12 @@ import pandas as pd
 
 
 def scrape_taiex(save_path: str = "../data/taiex_2005.csv"):
-    """
-    Downloads TAIEX (^TWII) monthly historical data for April-September 2005
-    from Yahoo Finance using the yfinance library.
-    Source: Yahoo Finance — Taiwan Capitalization Weighted Stock Index (^TWII)
-    URL: https://finance.yahoo.com/quote/%5ETWII/history/
-    """
-
     print("Downloading TAIEX data from Yahoo Finance...")
 
     # Download daily data for the full 2005 period
     ticker = yf.Ticker("^TWII")
+
+    # I call the history method to get daily stock data
     df_daily = ticker.history(start="2005-04-01", end="2005-09-30")
 
     if df_daily.empty:
