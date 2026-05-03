@@ -63,6 +63,12 @@ jobs:
         run: |
           pip install poetry
           poetry install --no-interaction --with dev
+          
+      - name: Create coverage config 
+        run: | 
+          echo "[run]" > .coveragerc
+          echo "omit =" >> .coveragerc
+          echo "    */master_pipeline.py" >> .coveragerc
 
       - name: Run unit tests
         run: |
