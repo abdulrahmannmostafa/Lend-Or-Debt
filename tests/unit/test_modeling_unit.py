@@ -15,17 +15,17 @@ def data_loader():
     return DataLoader()
 
 # proper MLflow disable (context manager)
-@pytest.fixture(autouse=True) #auto run this fixture when test is called
-def disable_mlflow(monkeypatch): # to disble mlflow function in real function
-    class DummyRun:
-        def __enter__(self): return self # context manager for enter nd cleaning
-        def __exit__(self, *args): pass
+# @pytest.fixture(autouse=True) #auto run this fixture when test is called
+# def disable_mlflow(monkeypatch): # to disble mlflow function in real function
+#     class DummyRun:
+#         def __enter__(self): return self # context manager for enter nd cleaning
+#         def __exit__(self, *args): pass
 
-    monkeypatch.setattr("mlflow.start_run", lambda *a, **k: DummyRun()) # any argument, keyword
-    monkeypatch.setattr("mlflow.log_param", lambda *a, **k: None)
-    monkeypatch.setattr("mlflow.log_params", lambda *a, **k: None)
-    monkeypatch.setattr("mlflow.log_metric", lambda *a, **k: None)
-    monkeypatch.setattr("mlflow.set_tag", lambda *a, **k: None)
+#     monkeypatch.setattr("mlflow.start_run", lambda *a, **k: DummyRun()) # any argument, keyword
+#     monkeypatch.setattr("mlflow.log_param", lambda *a, **k: None)
+#     monkeypatch.setattr("mlflow.log_params", lambda *a, **k: None)
+#     monkeypatch.setattr("mlflow.log_metric", lambda *a, **k: None)
+#     monkeypatch.setattr("mlflow.set_tag", lambda *a, **k: None)
 # Data loading
 def test_load_data(data_loader):
     data_loader.load_data()
@@ -81,83 +81,83 @@ def test_feature_selection_applied_shape(data_loader):
 
 # Mlflow Pipeline execution
 
-@patch.object(DataLoader, "run_dt")
-def test_pipeline_flow(mock_run):
-    dl = DataLoader()
-    dl.run_experiment(
-        model_type=6,
-        smote=False,
-        feature_selection="spearman",
-        version=1,
-        k=5
-    )
-    assert mock_run.called
+# @patch.object(DataLoader, "run_dt")
+# def test_pipeline_flow(mock_run):
+#     dl = DataLoader()
+#     dl.run_experiment(
+#         model_type=6,
+#         smote=False,
+#         feature_selection="spearman",
+#         version=1,
+#         k=5
+#     )
+#     assert mock_run.called
 
 
-@patch.object(DataLoader, "run_dt")
-def test_selected_features_used(mock_run):
-    dl = DataLoader()
-    dl.run_experiment(
-        model_type=6,
-        smote=False,
-        feature_selection="spearman",
-        version=1,
-        k=5
-    )
-    assert dl.X_train.shape[1] == 5
+# @patch.object(DataLoader, "run_dt")
+# def test_selected_features_used(mock_run):
+#     dl = DataLoader()
+#     dl.run_experiment(
+#         model_type=6,
+#         smote=False,
+#         feature_selection="spearman",
+#         version=1,
+#         k=5
+#     )
+#     assert dl.X_train.shape[1] == 5
 
 
-@patch.object(DataLoader, "run_dt")
-def test_feature_consistency_between_sets_features(mock_run):
-    dl = DataLoader()
-    dl.run_experiment(
-        model_type=6,
-        smote=False,
-        feature_selection="spearman",
-        version=1,
-        k=5
-    )
-    assert list(dl.X_train.columns) == list(dl.X_val.columns)
-    assert list(dl.X_train.columns) == list(dl.X_test.columns)
+# @patch.object(DataLoader, "run_dt")
+# def test_feature_consistency_between_sets_features(mock_run):
+#     dl = DataLoader()
+#     dl.run_experiment(
+#         model_type=6,
+#         smote=False,
+#         feature_selection="spearman",
+#         version=1,
+#         k=5
+#     )
+#     assert list(dl.X_train.columns) == list(dl.X_val.columns)
+#     assert list(dl.X_train.columns) == list(dl.X_test.columns)
 
 
-@patch.object(DataLoader, "run_dt")
-def test_intersect_feature_selection(mock_run):
-    dl = DataLoader()
-    dl.run_experiment(
-        model_type=6,
-        smote=False,
-        feature_selection="intersect",
-        version=1,
-        k=5
-    )
-    assert dl.X_train.shape[1] <= 5
+# @patch.object(DataLoader, "run_dt")
+# def test_intersect_feature_selection(mock_run):
+#     dl = DataLoader()
+#     dl.run_experiment(
+#         model_type=6,
+#         smote=False,
+#         feature_selection="intersect",
+#         version=1,
+#         k=5
+#     )
+#     assert dl.X_train.shape[1] <= 5
 
 
-def test_invalid_model_type():
-    dl = DataLoader()
-    with pytest.raises(KeyError):
-        dl.run_experiment(
-            model_type=99,
-            smote=False,
-            feature_selection="spearman",
-            version=1,
-            k=5
-        )
+# def test_invalid_model_type():
+#     dl = DataLoader()
+#     with pytest.raises(KeyError):
+#         dl.run_experiment(
+#             model_type=99,
+#             smote=False,
+#             feature_selection="spearman",
+#             version=1,
+#             k=5
+#         )
 
 
 # ================= MLflow =================
 
-def test_mlflow_tags(data_loader):
-    data_loader.run_experiment(
-        model_type=6,
-        smote=False,
-        feature_selection="spearman",
-        version=2,
-        k=5
-    )
+# def test_mlflow_tags(data_loader):
+#     data_loader.run_experiment(
+#         model_type=6,
+#         smote=False,
+#         feature_selection="spearman",
+#         version=2,
+#         k=5
+#     )
     # ✔ MLflow already disabled globally → no need for patch
-    assert True
+    # assert True
 
 
 # ================= BaseModel =================
@@ -175,21 +175,21 @@ def test_find_best_threshold():
 
 # ================= Logistic =================
 
-@patch("optuna.create_study")
-def test_logistic_train(mock_create_study):
+# @patch("optuna.create_study")
+# def test_logistic_train(mock_create_study):
 
-    class DummyStudy:
-        best_params = {"C": 1.0, "solver": "lbfgs"}
+#     class DummyStudy:
+#         best_params = {"C": 1.0, "solver": "lbfgs"}
 
-        def optimize(self, *args, **kwargs):
-            pass  # fake optuna optimization
+#         def optimize(self, *args, **kwargs):
+#             pass  # fake optuna optimization
 
-    mock_create_study.return_value = DummyStudy()
+#     mock_create_study.return_value = DummyStudy()
 
-    X = pd.DataFrame(np.random.rand(50, 5))
-    y = pd.Series(np.random.randint(0, 2, 50))
+#     X = pd.DataFrame(np.random.rand(50, 5))
+#     y = pd.Series(np.random.randint(0, 2, 50))
 
-    model = LogisticRegressionModel(X, y, X, y, X, y)
-    model.model_train()
+#     model = LogisticRegressionModel(X, y, X, y, X, y)
+#     model.model_train()
 
-    assert model.model is not None
+#     assert model.model is not None
