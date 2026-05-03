@@ -11,7 +11,7 @@ const EDA_TABS = [
   { id: "discrete_vs_target",     label: "Discrete vs Target" },
   { id: "correlation",            label: "Correlation Matrix" },
   { id: "dashboard_with_smote",     label: "Dashboard with SMOTE" },
-  { id: "dashboard_without_smote",     label: "Dashboard without SMOTE" }
+  { id: "dashboard_without_smote",     label: "Dashboard without SMOTE For the default data" }
 ];
 
 export function EDASection() {
@@ -96,7 +96,7 @@ export function EDASection() {
 
       {!ready ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <p>Initialise the EDA module — loads cleaned &amp; transformed data from default paths.</p>
+          <p>Initialise the EDA module </p>
           <button className="btn-dark" onClick={initEDA} disabled={initLoading}>
             {initLoading ? <Spinner /> : "Initialise EDA"}
           </button>
