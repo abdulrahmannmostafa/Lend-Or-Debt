@@ -361,15 +361,12 @@ def eda_columns():
 # ── EDA: dashboard_with_smote ─────────────────────────────────────────────────
 @app.route("/api/eda/dashboard_with_smote", methods=["POST"])
 def eda_dashboard_with_smote():
-    image_path = os.path.join(PROJECT_ROOT, "dashboard_with_smotes.png")
+    eda, err = _require_eda()
+    if err: return err
 
-    if not os.path.exists(image_path):
-        return jsonify({"error": f"Image not found at {image_path}"}), 404
-
-    with open(image_path, "rb") as img_file:
-        encoded = base64.b64encode(img_file.read()).decode("utf-8")
-
-    return jsonify({"image": encoded})
+    plt.close("all")
+    eda.draw_dashboard_after_smote()
+    return jsonify({"image": capture_fig()})
 
 
 # ── EDA: dashboard_without_smote ──────────────────────────────────────────────

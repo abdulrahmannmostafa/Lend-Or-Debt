@@ -46,3 +46,34 @@ export const globalStyles = `
 
   @media(max-width: 800px) { .grid { grid-template-columns: 1fr; padding: 12px; } .eda-card { grid-column: 1; } }
 `;
+
+export const introStyles = {
+  section: {
+    padding: '30px 20px',
+    background: '#f5f5f5',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  container: {
+    maxWidth: '600px',
+    textAlign: 'center',
+  },
+  title: {
+    fontSize: '32px',
+    fontWeight: '600',
+    marginBottom: '16px',
+    margin: '0 0 16px 0',
+  },
+  paragraph: {
+    fontSize: '14px',
+    lineHeight: '1.6',
+    marginBottom: '20px',
+    color: '#555',
+  },
+  image: {
+    maxWidth: '100%',
+    height: 'auto',
+    borderRadius: '6px',
+  },
+};
