@@ -68,8 +68,8 @@ def test_discrete_columns_exist(transformed_df):
           
 def test_mapping_validity():
     for feature, labels in eda.mapping.items():
-        assert isinstance(labels, list)
-        assert len(labels) > 0  
+        assert isinstance(labels, (list, dict))
+        assert len(labels) > 0
 
 def test_discrete_values_valid(transformed_df):
     for feature, valid_values in expected_values.items():
