@@ -1,6 +1,6 @@
 # Lend or Debt
 
-A full-stack machine learning project for **credit default risk analysis** on the Taiwan credit card dataset, with:
+A full-stack data science project for **credit default risk analysis** on the Taiwan credit card dataset, with:
 
 - a reproducible Python data pipeline,
 - model training and experiment tracking with MLflow,
