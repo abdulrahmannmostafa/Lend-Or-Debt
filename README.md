@@ -1,247 +1,146 @@
 # Lend or Debt
 
-> **End-to-end credit card default prediction** — from raw data acquisition through model selection, with an interactive React dashboard powered by a Flask REST API.
+A full-stack data science project for **credit default risk analysis** on the Taiwan credit card dataset, with:
 
----
+- a reproducible Python data pipeline,
+- model training and experiment tracking with MLflow,
+- a Flask API to run pipeline stages and serve EDA images,
+- and a React dashboard for interactive exploration.
 
 ## Table of Contents
 
 - [Overview](#overview)
-- [Architecture](#architecture)
+- [Repository Structure](#repository-structure)
 - [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Quick Start](#quick-start)
 - [Pipeline Stages](#pipeline-stages)
-- [Model Training & Selection](#model-training--selection)
+- [Model Training and Selection](#model-training-and-selection)
 - [Backend API](#backend-api)
-- [Frontend Dashboard](#frontend-dashboard)
+- [Frontend](#frontend)
+- [Getting Started](#getting-started)
 - [Development Commands](#development-commands)
 - [Environment Variables](#environment-variables)
 - [Deployment](#deployment)
 
----
-
 ## Overview
 
-**Lend or Debt** predicts whether a credit card client will default on their next payment. It combines a curated Taiwan credit card dataset with macroeconomic signals (interest rates, unemployment, stock index) sourced from public APIs and web scraping.
+`Lend-Or-Debt` processes credit and macroeconomic data, validates dataset quality, prepares training features, and trains multiple classifiers to predict **`default payment next month`**.
 
-The system is built as a **fully reproducible, phased pipeline**:
+The project is organized as a multi-phase pipeline:
 
-1. Acquire and merge data from multiple sources
-2. Validate data quality with Pandas
-3. Clean and split into train / validation / test sets
-4. Transform features (encoding, scaling, SMOTE oversampling)
-5. Perform exploratory data analysis (EDA)
-6. Train and track multiple ML models via MLflow
+1. Data acquisition and source merging
+2. Dataset validation (rule/statistical checks implemented in Python)
+3. Cleaning and train/validation/test split
+4. Feature transformation and SMOTE/no-SMOTE outputs
+5. EDA generation
+6. Model training + MLflow tracking
 
-Results are served through a **Flask REST API** and visualised in a **React + Vite** interactive dashboard.
+## Repository Structure
 
----
-
-## Architecture
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                        ML Pipeline (Python)                      │
-│  Acquisition → Validation → Cleaning → Transformation → EDA     │
-│                          ↓ MLflow                                │
-│              Model Training & Selection (10 models)             │
-└──────────────────────────────┬───────────────────────────────────┘
-                               │ REST API
-               ┌───────────────▼────────────────┐
-               │        Flask Backend            │
-               │  (Railway)  port 5000           │
-               └───────────────┬────────────────┘
-                               │ HTTP
-               ┌───────────────▼────────────────┐
-               │      React + Vite Frontend      │
-               │         (Vercel)                │
-               └────────────────────────────────┘
-```
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Language | Python ≥ 3.11 |
-| Dependency management | [Poetry](https://python-poetry.org/) |
-| Data processing | pandas, scikit-learn, imbalanced-learn |
-| Data validation | [Great Expectations](https://greatexpectations.io/) |
-| Experiment tracking | [MLflow](https://mlflow.org/) |
-| Hyperparameter tuning | [Optuna](https://optuna.org/) |
-| ML models | XGBoost, LightGBM, CatBoost, Random Forest, Extra Trees, AdaBoost, Logistic Regression, KNN, SVM, Decision Tree |
-| Web scraping | Selenium, BeautifulSoup4, requests |
-| Macro data | [FRED API](https://fred.stlouisfed.org/docs/api/fred/) (`fredapi`), `yfinance` |
-| Backend | Flask + Flask-CORS |
-| Frontend | React 19, Vite 8 |
-| Linting / formatting | Ruff, mypy |
-| Testing | pytest, pytest-cov |
-| Logging | Loguru |
-
----
-
-## Project Structure
-
-```
+```text
 Lend-Or-Debt/
 ├── src/
 │   ├── pipeline/
-│   │   ├── config.py                   # Centralised path constants
-│   │   ├── data_acquisition.py         # Phase 1 — fetch & merge sources
-│   │   ├── data_validation.py          # Phase 2 — Great Expectations checks
-│   │   ├── data_cleaning.py            # Phase 3 — clean & train/val/test split
-│   │   ├── data_transformation.py      # Phase 4 — encoding, scaling, SMOTE
-│   │   ├── eda.py                      # Phase 5 — EDA plots & dashboards
-│   │   ├── feature_extraction.py       # Feature selection (Spearman / MI)
-│   │   ├── master_pipeline.py          # Orchestrates all phases end-to-end
+│   │   ├── config.py
+│   │   ├── data_acquisition.py
+│   │   ├── data_validation.py
+│   │   ├── data_cleaning.py
+│   │   ├── data_transformation.py
+│   │   ├── eda.py
+│   │   ├── feature_extraction.py
+│   │   ├── master_pipeline.py
 │   │   └── mlflow/
-│   │       ├── models.py               # Model class definitions
-│   │       ├── model_selection_evaluations.py  # Phase 6 — training & tracking
-│   │       ├── create_environment.py
-│   │       ├── delete_exp.py
-│   │       ├── globals.py
-│   │       └── retrieve_exp.py
-│   └── scrape/
-│       ├── fetch_fred_api.py           # FRED macroeconomic series
-│       ├── merge_sources.py            # Merge all raw sources
-│       ├── parse_cbc_pdf.py            # CBC annual report PDF parser
-│       ├── scrape_taiex.py             # TAIEX stock index scraper
-│       └── scrape_unemployment.py      # Unemployment rate scraper
+│   │       ├── model_selection_evaluations.py
+│   │       ├── models.py
+│   │       └── ...
+│   ├── scrape/
+│   │   ├── fetch_fred_api.py
+│   │   ├── merge_sources.py
+│   │   ├── parse_cbc_pdf.py
+│   │   ├── scrape_taiex.py
+│   │   └── scrape_unemployment.py
+│   └── notebooks/
 ├── backend/
-│   ├── app.py                          # Flask REST API
+│   ├── app.py
 │   ├── requirements.txt
-│   ├── Procfile                        # Railway process file
+│   ├── Procfile
 │   └── railway.json
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── EDASection.jsx
-│   │   │   ├── Intro.jsx
-│   │   │   ├── LogBox.jsx
-│   │   │   ├── PlotImg.jsx
-│   │   │   ├── RunPhase.jsx
-│   │   │   ├── Spinner.jsx
-│   │   │   └── UploadSection.jsx
-│   │   ├── App.jsx
 │   │   ├── api.js
-│   │   ├── main.jsx
-│   │   └── styles.js
+│   │   └── App.jsx
 │   ├── package.json
-│   ├── vite.config.js
 │   └── vercel.json
 ├── data/
-│   ├── raw/                            # Original downloaded files
-│   ├── clean/                          # Cleaned train/val/test CSVs
-│   └── transformed/                    # Feature-engineered splits (with & without SMOTE)
+│   ├── clean/
+│   └── transformed/
 ├── tests/
 │   ├── unit/
 │   └── integration/
-├── docs/                               # Project documentation PDFs
-├── .env.example
 ├── Makefile
 ├── pyproject.toml
-└── pytest.ini
+└── README.md
 ```
 
----
+## Tech Stack
 
-## Quick Start
+### Core (Python)
+- Python 3.11+
+- Poetry
+- pandas, NumPy, SciPy
+- scikit-learn, imbalanced-learn
+- xgboost, lightgbm, catboost
+- mlflow, optuna
+- matplotlib, seaborn, plotly
+- Selenium, BeautifulSoup, requests, fredapi, yfinance
 
-### Prerequisites
+### Backend
+- Flask
+- Flask-CORS
 
-- Python ≥ 3.11
-- [Poetry](https://python-poetry.org/docs/#installation)
-- Node.js ≥ 18 (for the frontend)
-- A [FRED API key](https://fred.stlouisfed.org/docs/api/api_key.html) (free)
+### Frontend
+- React
+- Vite
 
-### 1. Clone the repository
+### Quality
+- Ruff
+- mypy
+- pytest
 
-```bash
-git clone https://github.com/abdulrahmannmostafa/Lend-Or-Debt.git
-cd Lend-Or-Debt
-```
+## Pipeline Stages
 
-### 2. Install Python dependencies
+The pipeline is orchestrated by `src/pipeline/master_pipeline.py` and can be run end-to-end or phase-by-phase.
 
-```bash
-poetry install
-```
+| Stage | Module | Main Output |
+|---|---|---|
+| 1. Acquisition | `src/pipeline/data_acquisition.py` | `data/taiwan_merged.csv` |
+| 2. Validation | `src/pipeline/data_validation.py` | `data/validation_results.json`, `data/validation_report.md` |
+| 3. Cleaning | `src/pipeline/data_cleaning.py` | `data/clean/*.csv` |
+| 4. Transformation | `src/pipeline/data_transformation.py` | `data/transformed/*.csv` |
+| 5. EDA | `src/pipeline/eda.py` | Generated visual outputs |
+| 6. Modeling | `src/pipeline/mlflow/model_selection_evaluations.py` | MLflow runs + metrics |
 
-### 3. Activate the virtual environment
-
-```bash
-poetry shell
-```
-
-### 4. Configure environment variables
-
-```bash
-cp .env.example .env
-# Edit .env and fill in your FRED_API_KEY
-```
-
-### 5. Run the full pipeline
+Run all phases:
 
 ```bash
 make pipeline
 ```
 
-### 6. (Optional) Start the backend and frontend
-
-```bash
-# Backend
-cd backend
-pip install -r requirements.txt
-python app.py
-
-# Frontend (separate terminal)
-cd frontend
-npm install
-npm run dev
-```
-
----
-
-## Pipeline Stages
-
-Run all phases at once or execute them individually:
-
-| Command | Description |
-|---|---|
-| `make pipeline` | Run all phases end-to-end |
-| `make acquisition` | Phase 1 — download & merge raw data |
-| `make validation` | Phase 2 — validate data with Great Expectations |
-| `make cleaning` | Phase 3 — clean data and split into train/val/test |
-| `make transformation` | Phase 4 — encode, scale, and apply SMOTE |
-| `make eda` | Phase 5 — generate EDA plots and dashboards |
-
-You can also resume the pipeline from any phase:
+Resume from a specific phase:
 
 ```bash
 poetry run python -m src.pipeline.master_pipeline --from 3
 ```
 
----
+## Model Training and Selection
 
-## Model Training & Selection
-
-Phase 6 trains a chosen model, logs metrics to MLflow, and supports feature selection strategies.
+Run the training/selection command:
 
 ```bash
-make modeling_selection model=<id> smote=<0|1> fs=<method> ver=<n> k=<n>
+make modeling_selection model=<id> smote=<0|1> fs=<spearman|mutual_info|intersect> ver=<n> k=<n>
 ```
 
-| Parameter | Description | Default |
-|---|---|---|
-| `model` | Model ID (see table below) | `6` |
-| `smote` | Apply SMOTE oversampling (`1` = yes) | `0` |
-| `fs` | Feature selection: `spearman`, `mutual_info`, `intersect` | `spearman` |
-| `ver` | Run version number (for MLflow labelling) | `4` |
-| `k` | Number of top features to select | `20` |
-
-**Model IDs:**
+Model IDs:
 
 | ID | Model |
 |---|---|
@@ -253,103 +152,121 @@ make modeling_selection model=<id> smote=<0|1> fs=<method> ver=<n> k=<n>
 | 5 | CatBoost |
 | 6 | Decision Tree |
 | 7 | AdaBoost |
-| 8 | K-Nearest Neighbors |
+| 8 | KNN |
 | 9 | SVM |
 
-**Example — train XGBoost with SMOTE and Spearman feature selection:**
-
-```bash
-make modeling_selection model=2 smote=1 fs=spearman ver=1 k=20
-```
-
-MLflow experiments are tracked under the `data_science_Project_team1` experiment. Start the UI with:
-
-```bash
-mlflow ui
-```
-
----
+MLflow experiment name used in code: `data_science_Project_team1`.
 
 ## Backend API
 
-The Flask backend (`backend/app.py`) exposes the following endpoints:
+The Flask backend in `backend/app.py` exposes endpoints under `/api`:
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/api/upload` | Upload a raw CSV dataset |
-| `POST` | `/api/run/cleaning` | Run the data cleaning phase |
-| `POST` | `/api/run/transformation` | Run the feature transformation phase |
-| `POST` | `/api/eda/init` | Initialise the EDA engine |
-| `GET` | `/api/eda/columns` | List available columns and feature groups |
-| `POST` | `/api/eda/univariate` | Generate a univariate plot for a column |
-| `POST` | `/api/eda/pie` | Generate a pie chart for a categorical feature |
-| `POST` | `/api/eda/continuous` | Scatter / regression plot of two continuous features |
-| `POST` | `/api/eda/discrete_vs_continuous` | Box / violin plot of discrete vs. continuous feature |
-| `POST` | `/api/eda/discrete_vs_target` | Stacked bar chart of discrete feature vs. target |
-| `POST` | `/api/eda/correlation` | Full correlation matrix heatmap |
-| `POST` | `/api/eda/dashboard_with_smote` | EDA dashboard (post-SMOTE data) |
-| `POST` | `/api/eda/dashboard_without_smote` | EDA dashboard (pre-SMOTE data) |
-| `GET` | `/api/debug` | Runtime diagnostics |
+- `POST /upload`
+- `POST /run/cleaning`
+- `POST /run/transformation`
+- `POST /eda/init`
+- `GET /eda/columns`
+- `POST /eda/univariate`
+- `POST /eda/pie`
+- `POST /eda/continuous`
+- `POST /eda/discrete_vs_continuous`
+- `POST /eda/discrete_vs_target`
+- `POST /eda/correlation`
+- `POST /eda/dashboard_with_smote`
+- `POST /eda/dashboard_without_smote`
+- `GET /debug`
 
-All plot endpoints return a JSON response with a base64-encoded PNG image:
+Most EDA endpoints return a base64 PNG image in JSON:
 
 ```json
-{ "image": "<base64-string>" }
+{ "image": "<base64...>" }
 ```
 
----
+## Frontend
 
-## Frontend Dashboard
+The React app (`frontend/`) supports:
 
-The React dashboard (`frontend/`) lets you:
+- uploading a CSV,
+- triggering cleaning/transformation,
+- initializing EDA,
+- rendering EDA images from API responses.
 
-- **Upload** a CSV dataset
-- **Run** cleaning and transformation phases via buttons
-- **Explore** EDA plots interactively (univariate, pie, scatter, box, stacked bar, correlation matrix)
-- **View** pre-rendered dashboards (with and without SMOTE)
+Frontend API base URL is read from:
 
-Start in development mode:
+- `VITE_API_URL` (if set), otherwise
+- `http://localhost:5000/api`
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.11+
+- Poetry
+- Node.js 18+
+- FRED API key
+
+### 1) Clone
+
+```bash
+git clone https://github.com/abdulrahmannmostafa/Lend-Or-Debt.git
+cd Lend-Or-Debt
+```
+
+### 2) Install Python dependencies
+
+```bash
+poetry install
+```
+
+### 3) Configure environment
+
+```bash
+cp .env.example .env
+# Set FRED_API_KEY in .env
+```
+
+### 4) Run pipeline
+
+```bash
+make pipeline
+```
+
+### 5) Run backend
+
+```bash
+cd backend
+pip install -r requirements.txt
+python app.py
+```
+
+### 6) Run frontend (new terminal)
 
 ```bash
 cd frontend
 npm install
-npm run dev        # http://localhost:5173
-npm run build      # production build
+npm run dev
 ```
-
----
 
 ## Development Commands
 
+From repository root:
+
 ```bash
-# Linting
-make lint          # Ruff code check
-make format        # Ruff auto-format
-make sta           # mypy static type analysis
-
-# Testing
-make unit          # Unit tests
-make integration   # Integration tests
-
-# Combined — lint, type-check, then test
-poetry run ruff check src/ && poetry run mypy src/ && poetry run pytest tests/
+make lint
+make format
+make sta
+make unit
+make integration
 ```
-
----
 
 ## Environment Variables
 
 | Variable | Description |
 |---|---|
-| `FRED_API_KEY` | API key for the Federal Reserve Economic Data (FRED) service |
-
-Copy `.env.example` to `.env` and fill in the values before running the pipeline.
-
----
+| `FRED_API_KEY` | Key for FRED macroeconomic API access |
+| `VITE_API_URL` | Frontend base URL for backend API (frontend runtime) |
 
 ## Deployment
 
-| Component | Platform | Config file |
-|---|---|---|
-| Backend (Flask) | [Railway](https://railway.app/) | `backend/Procfile`, `backend/railway.json` |
-| Frontend (React) | [Vercel](https://vercel.com/) | `frontend/vercel.json` |
+- Backend: Railway (`backend/Procfile`, `backend/railway.json`)
+- Frontend: Vercel (`frontend/vercel.json`)
